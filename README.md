@@ -6,15 +6,15 @@ A short, clear description of what this project does and the problem it solves.
 
 ## Features
 
-- Feature 1: Description of what it does.
-- Feature 2: Highlighting key functionality.
-- Feature 3: Fast, lightweight, and easy to configure.
+- Feature 1: Lorem ipsum dolor sit amet, consectetur adipiscing elit. Cras porttitor.
+- Feature 2: Lorem ipsum dolor sit amet, consectetur adipiscing elit. Cras porttitor.
+- Feature 3: Lorem ipsum dolor sit amet, consectetur adipiscing elit. Cras porttitor.
 
 ---
 
 ## Prerequisites
 
-Before getting started, ensure you have the following installed on your machine:
+Lorem ipsum dolor sit amet, consectetur adipiscing elit. Cras porttitor.
 
 ---
 
@@ -22,4 +22,8 @@ Before getting started, ensure you have the following installed on your machine:
 
 Follow these steps to set up the project locally:
 
+Lorem ipsum dolor sit amet, consectetur adipiscing elit. Cras porttitor.
+
 ## AI usage declaration
+
+- Lorem ipsum dolor sit amet, consectetur adipiscing elit. Cras porttitor.
