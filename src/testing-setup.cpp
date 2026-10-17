@@ -1,6 +1,5 @@
 
 #include <iostream>
-using namespace std;
 
 void initializeGame();
 void displayBoard();
@@ -12,7 +11,7 @@ int main() {
 }
 
 void initializeGame() {
-    cout << "Welcome to the game!" << endl;
+    std::cout << "Welcome to the game!" << std::endl;
 }
 
 void displayBoard() {
