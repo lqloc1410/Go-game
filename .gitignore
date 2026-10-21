@@ -8,4 +8,6 @@ notes.txt
 build/
 release/
 debug/
-
+unfinished_logic/
+tests/
+old/

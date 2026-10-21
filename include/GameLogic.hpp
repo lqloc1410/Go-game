@@ -29,26 +29,24 @@ enum class State : int8_t{
     White = 1,
     Empty = 0,
 };
+
 enum class Color : int8_t{
     Black = -1,
     White = 1,
 };
+
 std::optional<Color> StatetoColor(State state);
 State ColortoState(Color color);
 Color invertColor(Color color);
-
 
 // idk why tf this is here but keep it for later
 struct Point{
     int r = 0, c = 0;
     Point() = default;
 
-    Point(int row, int col){
-        r = row; c = col;
-    }
+    Point(int row, int col);
 };
 Point toPoint(int id, int sz);
-
 
 // Defines classes for Zorbist hashing for Superko (currently positional)
 class Hash{
@@ -71,20 +69,20 @@ private:
 public:
     Hash() = default;    
 
-    Hash(uint64_t high, uint64_t low) : h1(high), h2(low) {}
+    Hash(uint64_t high, uint64_t low); 
 
     // Generates random hash for the LUT
     static Hash random();
 
     // Hash combine operators
     Hash& operator^=(const Hash& rhs);
-
     Hash operator^(const Hash& rhs) const;
 
     // Spaceship operator to allow for all types of comparisons
     // Comparing hashes by value is meaningless but for now it allows std::set usage.
     auto operator<=>(const Hash& rhs) const = default;
 };
+
 class HashLUT{
 private:
     /*
@@ -113,8 +111,8 @@ class DSU{
 private:
     //Standard DSU stuff
     int board_size{};
-    std::array<int, CELL_CNT> parent{};
-    std::array<int, CELL_CNT> cmp_size{};
+    std::array<int16_t, CELL_CNT> parent{};
+    std::array<int16_t, CELL_CNT> cmp_size{};
 
     /*
         Fixed-size bitset array for checking liberties. 
@@ -125,33 +123,60 @@ private:
     std::array<std::bitset<CELL_CNT>, CELL_CNT> liberties{};
     
     // Forms an implicit linked list for easy stone removal.
-    std::array<int, CELL_CNT> next_stone{};
+    std::array<int16_t, CELL_CNT> next_stone{};
+    
+
+    // Storage for easy rollbacks
+    enum class OpType : uint8_t{Reset, Join, BitFlip};
+
+    struct OpRecord {
+        OpType type;
+        int16_t u;      // Reset: node u | Join: ru | BitFlip: ru
+        int16_t v;      // Reset: old_parent | Join: rv | BitFlip: lib_cell
+        int16_t extra1; // Reset: old_cmp_size
+        int16_t extra2; // Reset: old_next_stone
+    };
+
+    std::vector<OpRecord> op_history;
+    std::vector<std::bitset<CELL_CNT>> bitset_history; // Only pushed on Reset & Join
+
     
 public:
+    struct Checkpoint { size_t op_idx; size_t bitset_idx; };
+    Checkpoint checkpoint() const;
     DSU() = default;
     DSU(int sz);
     
     // Standard DSU stuff
-    int get(int u);
-    bool join(int u, int v);
+    int get(int16_t u);
+    bool join(int16_t u, int16_t v);
 
     // Helper operations for liberties
-    int count_liberty(int u);
-    void add_liberty(int u, int lib_cell);
-    void remove_liberty(int u, int lib_cell);
+    int count_liberty(int16_t u);
+    void add_liberty(int16_t u, int16_t lib_cell);
+    void remove_liberty(int16_t u, int16_t lib_cell);
 
-    // Function to clear group DSU & find removed stones.
-    // This function is AI generated. See AI01
-    std::vector<int16_t> clear_group(int u);
+    // Function to clear a connected group containing u
+    void clear_group(int u);
+
+    // Function to get a connected group.
+    std::vector<int16_t> get_group(int u);
+
+    // CAUTION: Only safe to call on an isolated empty cell, 
+    // or when looping over ALL members of an entire captured group.
+    // Calling this on a single stone inside an active group will break everything!
+    void reset(int16_t u);
+    void rollback(Checkpoint cp);
 };
 
 struct UndoState{
     // Storing past moves for undos.
     bool is_pass{};
     Color color;
-    int16_t id;
+    int16_t id{-1};
     std::vector<int16_t> captured;
-    DSU liberty_tracker;
+    DSU::Checkpoint dsu_cp;
+
     Hash prev_hash;
     UndoState() = default;
 
@@ -167,9 +192,8 @@ struct RedoState{
     RedoState() = default;
     RedoState(int16_t inp_id, Color inp_color);
 
-    RedoState(bool pass, Color c);
+    RedoState(Color c, bool pass);
 };
-
 
 class Board{
 private:
@@ -200,11 +224,19 @@ private:
     // Helper for territory counting
     int score_cnt_helper(int16_t id) const;
 
-    // Helper for removing groups. This function is partly AI generated. See AI01
-    bool remove_group(int id, std::array<State, CELL_CNT>& b, DSU& dsu, std::vector<int16_t>& captured);
+    // Helper function to check if a move is suicide. 
+    // This function also collects data of empty, friendly and opponent cells 
+    bool is_suicide(int16_t id, Color color, std::vector<int16_t> &empty, std::vector<int16_t> &friendly, std::vector<int16_t> &opponent);
+    // Helper to check if a placement is suicide.
+    // Also collects opponent roots to check hash.
+    bool is_suicide(int16_t id, Color color, std::vector<int16_t> &opponent);
 
 public:
     Board(int sz);
+
+    bool is_legal(int16_t curr_id, Color color);
+
+    std::vector<int16_t> get_legal_moves(Color color);
 
     std::optional<UndoState> place(int16_t curr_id, Color color);
 
