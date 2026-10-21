@@ -1,5 +1,4 @@
-// src/ui/Fonts.cpp
-#include "ui/Fonts.hpp"
+#include "ui/fonts.hpp"
 #include <iostream>
 
 bool Fonts::load(const std::string& dir) {

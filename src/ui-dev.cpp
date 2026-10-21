@@ -5,13 +5,18 @@
 #include "ui/board.hpp"
 #include "ui/hudView.hpp"
 #include "ui/fonts.hpp"
+#include "ui/layout.hpp"
 
 int main() {
+    
     sf::RenderWindow window(sf::VideoMode(1150, 800), "Go UI - dev");
     window.setFramerateLimit(60);
 
-    GameSession game(19);
-    BoardView board(19, 800.f);
+    window.setView(makeLetterboxView(window.getSize()));
+
+
+    GameSession game(9);
+    BoardView board(9, 800.f);
 
     Fonts fonts;
     if (!fonts.load()) return 1;
@@ -36,6 +41,10 @@ int main() {
     while (window.isOpen()) {
         sf::Event e;
         while (window.pollEvent(e)) {
+            if (e.type == sf::Event::Resized) {
+                window.setView(makeLetterboxView({e.size.width, e.size.height}));
+            }
+
             if (e.type == sf::Event::Closed) window.close();
 
             sf::Vector2f mouse = window.mapPixelToCoords(sf::Mouse::getPosition(window));
@@ -53,7 +62,7 @@ int main() {
                                 hud.push("Captured " + std::to_string(m.captured) + " stones!");
                             break;
                         case MoveResult::Occupied: hud.push("That point is already occupied"); break;
-                        case MoveResult::Invalid:  hud.push("Invalid move (K.O or suicide)"); break;
+                        case MoveResult::Invalid:  hud.push("Invalid move (Ko or suicide)"); break;
                         case MoveResult::GameOver: hud.push("The game is over"); break;
                         default: break;
                     }

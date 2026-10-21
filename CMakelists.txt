@@ -12,27 +12,30 @@ FetchContent_Declare(SFML
     GIT_TAG 2.6.1)
 FetchContent_MakeAvailable(SFML)
 
-# 1) Gom mọi file .cpp trong src/
-file(GLOB_RECURSE ALL_SOURCES CONFIGURE_DEPENDS src/*.cpp)
+set (SOURCES
+    src/mode/gameSession.cpp
+    src/ui/fonts.cpp
+    src/ui/hudView.cpp
+    src/board.cpp
+    src/GameLogic.cpp
+)
 
-# 2) Các file có hàm main (mỗi file là một chương trình riêng)
-set(ENTRY_FILES main game-ui-test ui-dev)
-
-# 3) Phần còn lại (logic, sau này là UI) gom thành thư viện dùng chung
-set(LIB_SOURCES ${ALL_SOURCES})
-foreach(e ${ENTRY_FILES})
-    list(REMOVE_ITEM LIB_SOURCES ${CMAKE_SOURCE_DIR}/src/${e}.cpp)
-endforeach()
-
-add_library(GoCore STATIC ${LIB_SOURCES})
+add_library(GoCore STATIC ${SOURCES})
 target_include_directories(GoCore PUBLIC include)
 target_link_libraries(GoCore PUBLIC sfml-graphics sfml-window sfml-system sfml-audio)
 
-foreach(e ${ENTRY_FILES})
+function(add_go_program e)
     add_executable(${e} src/${e}.cpp)
     target_link_libraries(${e} PRIVATE GoCore)
-    target_link_options(${e} PRIVATE -static-libgcc -static-libstdc++)
+
+    if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+        target_link_options(${e} PRIVATE -static-libgcc -static-libstdc++)
+    endif()
+
     add_custom_command(TARGET ${e} POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_directory
         ${CMAKE_SOURCE_DIR}/assets $<TARGET_FILE_DIR:${e}>/assets)
-endforeach()
+endfunction()
+
+add_go_program(main)
+add_go_program(ui-dev)

@@ -1,4 +1,5 @@
-#include "ui/HudView.hpp"
+#include "ui/hudView.hpp"
+#include "ui/layout.hpp"
 
 static sf::String u8(const std::string& s) {
     return sf::String::fromUtf8(s.begin(), s.end());
@@ -24,7 +25,7 @@ void hudView::draw(sf::RenderWindow& w, float panelX, int currentPlayer,
         w.draw(t);
     };
 
-    sf::RectangleShape panel({(float)w.getSize().x - panelX, (float)w.getSize().y});
+    sf::RectangleShape panel({kVirtualW - panelX, kVirtualH});
     panel.setPosition(panelX, 0.f);
     panel.setFillColor(sf::Color(30, 30, 34));
     w.draw(panel);
