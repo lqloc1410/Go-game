@@ -169,9 +169,15 @@ public:
     void rollback(Checkpoint cp);
 };
 
+enum class MoveType : int8_t{Place, Pass, Resign, DEFAULT};
+
+enum class MoveStatus : int8_t{Success, Suicide, Ko, Occupied, OutOfBounds, GameEnded};
+
+enum class EndgameStatus : int8_t{Pass, Resignation, NotOver};
+
 struct UndoState{
     // Storing past moves for undos.
-    bool is_pass{};
+    MoveType type = MoveType::DEFAULT;
     Color color;
     int16_t id{-1};
     std::vector<int16_t> captured;
@@ -180,19 +186,22 @@ struct UndoState{
     Hash prev_hash;
     UndoState() = default;
 
-    UndoState(bool pass, Color c);
+    UndoState(MoveType t, Color c);
+};
+
+struct MoveState{
+    MoveStatus status = MoveStatus::Success;
+    std::optional<UndoState> undo_state = std::nullopt;
 };
 
 struct RedoState{
     // Storing past moves for redos.
-    bool is_pass{};
+    MoveType type = MoveType::DEFAULT;
     int16_t id{};
     Color color{};
 
     RedoState() = default;
-    RedoState(int16_t inp_id, Color inp_color);
-
-    RedoState(Color c, bool pass);
+    RedoState(int16_t inp_id, Color inp_color, MoveType inp_type);
 };
 
 class Board{
@@ -238,7 +247,7 @@ public:
 
     std::vector<int16_t> get_legal_moves(Color color);
 
-    std::optional<UndoState> place(int16_t curr_id, Color color);
+    MoveState place(int16_t curr_id, Color color);
 
     void undo(const UndoState &state);
 
@@ -262,15 +271,19 @@ private:
     std::vector<UndoState> undo_stack;
     std::vector<RedoState> redo_stack;
 public:
-    bool is_game_over() const;
+    EndgameStatus is_game_over() const;
 
     Color get_turn() const;
 
-    bool play_move(Board &board, int16_t id, Color color);
+    MoveStatus play_move(Board &board, int16_t id, Color color);
 
     bool undo_move(Board &board);
 
     bool redo_move(Board &board);
 
     bool pass(Color color);
+
+    bool resign(Color color);
+
+    std::optional<Color> get_resigned_player();
 };

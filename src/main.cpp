@@ -10,12 +10,13 @@ static void print_help() {
     std::cout << "\nCommands:\n"
               << "  <r> <c>      : Play at 0-indexed (row, col), e.g. '3 4'\n"
               << "  <Col><Row>   : Play at Go coordinate, e.g. 'D4', 'E5', 'Q16'\n"
-              << "  pass  (p)    : Pass turn (2 consecutive passes end the game)\n"
-              << "  undo  (u)    : Undo the last move\n"
-              << "  redo  (r)    : Redo the last undone move\n"
-              << "  score (s)    : Calculate current Chinese Area Score\n"
-              << "  help  (h)    : Show this help message\n"
-              << "  quit  (q)    : Exit the game\n";
+              << "  pass   (p)   : Pass turn (2 consecutive passes end the game)\n"
+              << "  resign       : Resign the game\n"
+              << "  undo   (u)   : Undo the last move\n"
+              << "  redo   (r)   : Redo the last undone move\n"
+              << "  score  (s)   : Calculate current Chinese Area Score\n"
+              << "  help   (h)   : Show this help message\n"
+              << "  quit   (q)   : Exit the game\n";
 }
 
 static void print_score(const Board& board, double komi) {
@@ -121,9 +122,18 @@ int main() {
         std::cout << "\nStones -> Black (X): " << board.get_black_cnt()
                   << " | White (O): " << board.get_white_cnt() << "\n";
 
-        if (history.is_game_over()) {
+        EndgameStatus endgame = history.is_game_over();
+        if (endgame == EndgameStatus::Pass) {
             std::cout << "\n*** Game Over (Both players passed consecutively) ***\n";
             print_score(board, komi);
+            std::cout << "Enter 'undo' (u) to resume or 'quit' (q) to exit: ";
+        } else if (endgame == EndgameStatus::Resignation) {
+            std::optional<Color> resigned = history.get_resigned_player();
+            const char* loser_str = (resigned == Color::Black) ? "Black (X)" : "White (O)";
+            const char* winner_str = (resigned == Color::Black) ? "WHITE (O)" : "BLACK (X)";
+            const char* code_str = (resigned == Color::Black) ? "W+R" : "B+R";
+            std::cout << "\n*** Game Over (" << loser_str << " resigned) ***\n";
+            std::cout << ">>> Result: " << winner_str << " wins by resignation (" << code_str << ")!\n";
             std::cout << "Enter 'undo' (u) to resume or 'quit' (q) to exit: ";
         } else {
             std::cout << "[" << turn_str << "] Enter move or command: ";
@@ -167,8 +177,14 @@ int main() {
             } else {
                 std::cout << ">> Cannot pass: game is already over.\n";
             }
+        } else if (cmd_lower == "resign") {
+            if (history.resign(turn)) {
+                std::cout << ">> " << turn_str << " resigned.\n";
+            } else {
+                std::cout << ">> Cannot resign: game is already over.\n";
+            }
         } else {
-            if (history.is_game_over()) {
+            if (history.is_game_over() != EndgameStatus::NotOver) {
                 std::cout << ">> Game is over! Use 'undo' or 'quit'.\n";
                 continue;
             }
@@ -179,11 +195,28 @@ int main() {
                 continue;
             }
 
-            if (history.play_move(board, move_id, turn)) {
-                Point pt = toPoint(move_id, board_size);
-                std::cout << ">> " << turn_str << " placed at (" << pt.r << ", " << pt.c << ").\n";
-            } else {
-                std::cout << ">> Illegal move (occupied, suicide, or superko violation)!\n";
+            MoveStatus status = history.play_move(board, move_id, turn);
+            switch (status) {
+                case MoveStatus::Success: {
+                    Point pt = toPoint(move_id, board_size);
+                    std::cout << ">> " << turn_str << " placed at (" << pt.r << ", " << pt.c << ").\n";
+                    break;
+                }
+                case MoveStatus::Occupied:
+                    std::cout << ">> Illegal move: intersection is already occupied!\n";
+                    break;
+                case MoveStatus::Suicide:
+                    std::cout << ">> Illegal move: suicide is not allowed!\n";
+                    break;
+                case MoveStatus::Ko:
+                    std::cout << ">> Illegal move: positional superko / ko violation!\n";
+                    break;
+                case MoveStatus::OutOfBounds:
+                    std::cout << ">> Illegal move: coordinate is out of bounds!\n";
+                    break;
+                case MoveStatus::GameEnded:
+                    std::cout << ">> Cannot play: game is already over!\n";
+                    break;
             }
         }
     }

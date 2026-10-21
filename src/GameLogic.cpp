@@ -217,21 +217,18 @@ void DSU::rollback(Checkpoint cp) {
     }
 }
 
-UndoState::UndoState(bool pass, Color c){
-    is_pass = pass;
+UndoState::UndoState(MoveType t, Color c){
+    type = t;
     color = c;
     id = -1;
 }
 
-RedoState::RedoState(int16_t inp_id, Color inp_color){
+RedoState::RedoState(int16_t inp_id, Color inp_color, MoveType inp_type){
     id = inp_id;
     color = inp_color;
+    type = inp_type;
 }
-RedoState::RedoState(Color c, bool pass){
-    is_pass = pass;
-    color = c;
-    id = -1;
-}
+
 
 int Board::get(int r, int c) const{
     return r*board_size + c;
@@ -404,9 +401,13 @@ std::vector<int16_t> Board::get_legal_moves(Color color) {
     return ans;
 }
 
-std::optional<UndoState> Board::place(int16_t curr_id, Color color) {
-    if (curr_id < 0 || curr_id >= cell_cnt || board[curr_id] != State::Empty) {
-        return std::nullopt;
+MoveState Board::place(int16_t curr_id, Color color) {
+    if (curr_id < 0 || curr_id >= cell_cnt) {
+        return {MoveStatus::OutOfBounds};
+    }
+
+    if (board[curr_id] != State::Empty){
+        return {MoveStatus::Occupied};
     }
 
     State my_state = ColortoState(color);
@@ -418,7 +419,7 @@ std::optional<UndoState> Board::place(int16_t curr_id, Color color) {
     opponent.reserve(4);
     empty.reserve(4);
 
-    if (is_suicide(curr_id, color, empty, friendly, opponent)) return std::nullopt;
+    if (is_suicide(curr_id, color, empty, friendly, opponent)) return {MoveStatus::Suicide};
     
 
     Hash tmp_hash = curr_hash ^ HashLUT::getHash(curr_id, color);
@@ -434,14 +435,15 @@ std::optional<UndoState> Board::place(int16_t curr_id, Color color) {
         }
     }
 
-    if (seen_hashes.contains(tmp_hash)) return std::nullopt;
+    if (seen_hashes.contains(tmp_hash)) return MoveState{MoveStatus::Ko};
 
-    UndoState res;
-    res.color = color;
-    res.id = curr_id;
-    res.captured = captured;
-    res.prev_hash = curr_hash;                // Save PREVIOUS hash
-    res.dsu_cp = liberty_tracker.checkpoint();    // Save PREVIOUS DSU
+    MoveState res;
+    res.undo_state.emplace();
+    res.undo_state -> type = MoveType::Place;
+    res.undo_state -> color = color;
+    res.undo_state -> id = curr_id;
+    res.undo_state -> prev_hash = curr_hash;                // Save PREVIOUS hash
+    res.undo_state -> dsu_cp = liberty_tracker.checkpoint();    // Save PREVIOUS DSU
 
     liberty_tracker.reset(curr_id);
     board[curr_id] = my_state;
@@ -487,11 +489,12 @@ std::optional<UndoState> Board::place(int16_t curr_id, Color color) {
         white_cnt -= static_cast<int>(captured.size());
     }
 
+    res.undo_state -> captured = std::move(captured);
     return res;
 }
 
 void Board::undo(const UndoState &state){
-    if (state.is_pass) return;
+    if (state.type != MoveType::Place) return;
     board[state.id] = State::Empty;
     State opp_state = ColortoState(invertColor(state.color));
     for (int16_t i: state.captured){
@@ -570,10 +573,14 @@ double Board::calculate_score(double komi) const{
 }
 
 
-bool HistoryTracker::is_game_over() const{
+EndgameStatus HistoryTracker::is_game_over() const {
     int sz = undo_stack.size();
-    if (sz < 2) return false;
-    return undo_stack[sz - 1].is_pass && undo_stack[sz - 2].is_pass;
+    if (sz == 0) return EndgameStatus::NotOver;
+    if (undo_stack.back().type == MoveType::Resign) return EndgameStatus::Resignation;
+    if (sz >= 2 && undo_stack[sz - 1].type == MoveType::Pass && undo_stack[sz - 2].type == MoveType::Pass) {
+        return EndgameStatus::Pass;
+    }
+    return EndgameStatus::NotOver;
 }
 
 Color HistoryTracker::get_turn() const {
@@ -581,29 +588,28 @@ Color HistoryTracker::get_turn() const {
     return invertColor(undo_stack.back().color);
 }
 
-bool HistoryTracker::play_move(Board &board, int16_t id, Color color){
-    if (is_game_over()) return false;
+MoveStatus HistoryTracker::play_move(Board &board, int16_t id, Color color){
+    if (is_game_over() != EndgameStatus::NotOver) return MoveStatus::GameEnded;
 
-    auto res = board.place(id, color);
+    MoveState res = board.place(id, color);
 
-    if (!res.has_value()) return false;
+    if (res.status != MoveStatus::Success) return res.status;
 
-    undo_stack.push_back(std::move(*res));
+    undo_stack.push_back(std::move(*res.undo_state));
 
     redo_stack.clear();
-    return true;
+    return MoveStatus::Success;
 }
 
 bool HistoryTracker::undo_move(Board &board){
     if (undo_stack.empty()) return false;
 
-    UndoState tmp = undo_stack.back();
-    if (!tmp.is_pass){
+    const UndoState& tmp = undo_stack.back();
+    if (tmp.type == MoveType::Place){
         board.undo(undo_stack.back());
-        redo_stack.push_back(RedoState(tmp.id, tmp.color));
-    }else{
-        redo_stack.push_back(RedoState(tmp.color, tmp.is_pass));
     }
+    redo_stack.push_back(RedoState(tmp.id, tmp.color, tmp.type));
+
     undo_stack.pop_back();
     return true;
 }
@@ -613,12 +619,12 @@ bool HistoryTracker::redo_move(Board &board){
     
     RedoState tmp = redo_stack.back();
 
-    if (!tmp.is_pass){
+    if (tmp.type == MoveType::Place){
         auto res = board.place(redo_stack.back().id, redo_stack.back().color);
-        if (!res.has_value()) return false;
-        undo_stack.push_back(std::move(*res));
+        if (res.status != MoveStatus::Success) return false;
+        undo_stack.push_back(std::move(*res.undo_state));
     }else{
-        undo_stack.push_back(UndoState(tmp.is_pass, tmp.color));
+        undo_stack.push_back(UndoState(tmp.type, tmp.color));
     }
 
     redo_stack.pop_back();
@@ -626,8 +632,20 @@ bool HistoryTracker::redo_move(Board &board){
 }
 
 bool HistoryTracker::pass(Color color){
-    if (is_game_over()) return false;
-    undo_stack.push_back(UndoState(true, color));
+    if (is_game_over() != EndgameStatus::NotOver) return false;
+    undo_stack.push_back(UndoState(MoveType::Pass, color));
     redo_stack.clear();
     return true;
+}
+
+bool HistoryTracker::resign(Color color){
+    if (is_game_over() != EndgameStatus::NotOver) return false;
+    undo_stack.push_back(UndoState(MoveType::Resign, color));
+    redo_stack.clear();
+    return true;
+}
+
+std::optional<Color> HistoryTracker::get_resigned_player(){
+    if (is_game_over() != EndgameStatus::Resignation) return std::nullopt;
+    return undo_stack.back().color;
 }
