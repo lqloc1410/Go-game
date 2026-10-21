@@ -6,7 +6,7 @@ enum class MoveResult { Ok, Occupied, Invalid, GameOver, OutOfBoard };
 
 struct MoveInfo {
     MoveResult result;
-    int captured = 0;      // số quân đối phương vừa bị bắt
+    int captured = 0;      
 };
 
 class GameSession {
@@ -14,8 +14,8 @@ public:
     explicit GameSession(int boardSize = 19) { newGame(boardSize); }
 
     void newGame(int boardSize);
-    void reset() { newGame(size_); }          // chơi lại, giữ cỡ bàn
-
+    void reset() { newGame(size_); }          
+    
     MoveInfo play(int x, int y);              // x = cột, y = hàng
     bool pass();
     bool undo();
@@ -30,7 +30,7 @@ public:
     double score(double komi = 7.5) const;    // > 0: Trắng hơn, < 0: Đen hơn
 
 private:
-    int size_ = 19;
+    int size_ = 9;
     std::unique_ptr<Board> board_;
     HistoryTracker history_;
 };

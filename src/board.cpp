@@ -12,7 +12,6 @@ void BoardView::setLayout(sf::Vector2f origin, float pixelSize) {
     origin_ = origin; size_ = pixelSize; recompute();
 }
 
-// Bàn cờ có n đường kẻ nên có n+1 "khoảng": chừa 1 khoảng làm lề mỗi bên
 void BoardView::recompute() { cell_ = size_ / (n_ + 1); }
 
 sf::Vector2f BoardView::gridToPixel(int x, int y) const {
