@@ -6,6 +6,7 @@
 #include <iomanip>
 #include <cmath>
 
+// AI-generated: see AI12
 static void print_help() {
     std::cout << "\nCommands:\n"
               << "  <r> <c>      : Play at 0-indexed (row, col), e.g. '3 4'\n"
@@ -19,6 +20,7 @@ static void print_help() {
               << "  quit   (q)   : Exit the game\n";
 }
 
+// AI-generated: see AI12
 static void print_score(const Board& board, double komi) {
     double score = board.calculate_score(komi);
     std::cout << "\n================ Area Score (Komi: " << komi << ") ================\n";
@@ -36,6 +38,7 @@ static void print_score(const Board& board, double komi) {
     std::cout << "==============================================================\n";
 }
 
+// AI-generated: see AI12
 static bool parse_move(const std::string& line, const Board& board, int16_t& out_id) {
     int sz = board.get_size();
     std::istringstream iss(line);
@@ -86,6 +89,7 @@ static bool parse_move(const std::string& line, const Board& board, int16_t& out
     return false;
 }
 
+// AI-generated: see AI12
 int main() {
     std::cout << "==============================================================\n";
     std::cout << "                     Go Game CLI Engine                       \n";
@@ -122,6 +126,7 @@ int main() {
         std::cout << "\nStones -> Black (X): " << board.get_black_cnt()
                   << " | White (O): " << board.get_white_cnt() << "\n";
 
+        // AI-assisted: see AI26
         EndgameStatus endgame = history.is_game_over();
         if (endgame == EndgameStatus::Pass) {
             std::cout << "\n*** Game Over (Both players passed consecutively) ***\n";
@@ -171,6 +176,7 @@ int main() {
             } else {
                 std::cout << ">> Nothing to redo!\n";
             }
+        // AI-assisted: see AI26
         } else if (cmd_lower == "pass" || cmd_lower == "p") {
             if (history.pass(turn)) {
                 std::cout << ">> " << turn_str << " passed.\n";

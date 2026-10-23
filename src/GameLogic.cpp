@@ -17,10 +17,12 @@ Color invertColor(Color color){
     return color == Color::White ? Color::Black : Color::White;
 }
 
-
+// AI-assisted: see AI03
 Point::Point(int row, int col){
     r = row; c = col;
 }
+
+// AI-assisted: see AI11
 Point toPoint(int id, int sz){
     Point tmp;
     
@@ -53,10 +55,13 @@ const Hash& HashLUT::getHash(int id, Color color){
 }
 
 
+// AI-assisted: see AI20
 // DSU for easy group joining & finding liberties
 DSU::Checkpoint DSU::checkpoint() const {
     return {op_history.size(), bitset_history.size()};
 }
+
+// AI-assisted: see AI03
 DSU::DSU(int sz){
     board_size = sz;
     int total_cells = board_size * board_size;
@@ -67,6 +72,7 @@ DSU::DSU(int sz){
     }
 }
 
+// AI-assisted: see AI22
 // Standard DSU stuff
 int DSU::get(int16_t u){
     // No path compression here to make it easy to roll back to a previous state.
@@ -74,12 +80,15 @@ int DSU::get(int16_t u){
     while (u != parent[u]) u = parent[u];
     return u;
 }
+
+// AI-assisted: see AI02, AI20
 bool DSU::join(int16_t u, int16_t v){
     int16_t ru = get(u), rv = get(v);
     if (ru == rv) return false;
 
     if (cmp_size[ru] < cmp_size[rv]) std::swap(ru, rv);
     
+    // AI-assisted: see AI20
     op_history.push_back({
         OpType::Join, ru, rv, 0, 0
     });
@@ -99,15 +108,19 @@ bool DSU::join(int16_t u, int16_t v){
         We have sets A -> B -> C -> A and D -> E -> D. 
         After merging through B and E, we have A -> B -> D -> E -> C -> A   
     */
+    // AI-assisted: see AI02
     std::swap(next_stone[ru], next_stone[rv]);
     return true; 
 }
 
 // Helper operations for liberties
+// AI-assisted: see AI20, AI23
 int DSU::count_liberty(int16_t u){
     int16_t ru = get(u);
     return liberties[ru].count();
 }
+
+// AI-assisted: see AI20, AI23
 void DSU::add_liberty(int16_t u, int16_t lib_cell) {
     int16_t ru = get(u);
     if (!liberties[ru].test(lib_cell)){
@@ -121,6 +134,8 @@ void DSU::add_liberty(int16_t u, int16_t lib_cell) {
         liberties[ru].set(lib_cell);
     }
 }
+
+// AI-assisted: see AI20, AI23
 void DSU::remove_liberty(int16_t u, int16_t lib_cell) {
     int16_t ru = get(u);
     if (liberties[ru].test(lib_cell)){
@@ -135,6 +150,7 @@ void DSU::remove_liberty(int16_t u, int16_t lib_cell) {
     }
 }
 
+// AI-assisted: see AI09
 // Function to clear a connected group containing u
 void DSU::clear_group(int u) {
     // Traverses the group containing id u to reset DSU node states
@@ -152,6 +168,7 @@ void DSU::clear_group(int u) {
     } while (curr != u);
 }
 
+// AI-assisted: see AI10
 // Function to get a connected group.
 std::vector<int16_t> DSU::get_group(int u) {
     std::vector<int16_t> group_members;
@@ -168,6 +185,7 @@ std::vector<int16_t> DSU::get_group(int u) {
     return group_members;
 }
 
+// AI-assisted: see AI10, AI19, AI20
 // CAUTION: Only safe to call on an isolated empty cell, 
 // or when looping over ALL members of an entire captured group.
 // Calling this on a single stone inside an active group will break everything!
@@ -187,6 +205,7 @@ void DSU::reset(int16_t u){
     next_stone[u] = u;
 }
 
+// AI-assisted: see AI20
 void DSU::rollback(Checkpoint cp) {
     while (op_history.size() > cp.op_idx) {
         OpRecord op = op_history.back();
@@ -217,12 +236,14 @@ void DSU::rollback(Checkpoint cp) {
     }
 }
 
+// AI-assisted: see AI05, AI26
 UndoState::UndoState(MoveType t, Color c){
     type = t;
     color = c;
     id = -1;
 }
 
+// AI-assisted: see AI26
 RedoState::RedoState(int16_t inp_id, Color inp_color, MoveType inp_type){
     id = inp_id;
     color = inp_color;
@@ -234,6 +255,7 @@ int Board::get(int r, int c) const{
     return r*board_size + c;
 }
 
+// AI-assisted: see AI08
 int Board::score_cnt_helper(int16_t id) const{
     if (board[id] != State::Empty || visited[id]) return 0;
 
@@ -270,6 +292,7 @@ int Board::score_cnt_helper(int16_t id) const{
     else return 0;
 }
 
+// AI-assisted: see AI04, AI13, AI16, AI18
 bool Board::is_suicide(int16_t id, Color color, std::vector<int16_t> &empty, std::vector<int16_t> &friendly, std::vector<int16_t> &opponent){       
     empty.clear();
     friendly.clear();
@@ -297,10 +320,12 @@ bool Board::is_suicide(int16_t id, Color color, std::vector<int16_t> &empty, std
             continue;
         }
 
+        // AI-assisted: see AI04
         int root_nid = liberty_tracker.get(nid);
         if (board[nid] == my_state){
             if (std::find(friendly.begin(), friendly.end(), root_nid) == friendly.end()){
                 friendly.push_back(root_nid);
+                // AI-assisted: see AI16
                 if (liberty_tracker.count_liberty(root_nid) > 1) valid_friendly_cnt++;
             } 
         }else{
@@ -315,6 +340,7 @@ bool Board::is_suicide(int16_t id, Color color, std::vector<int16_t> &empty, std
     return empty_cnt == 0 && valid_friendly_cnt == 0 && valid_opponent_cnt == 0;
 }
 
+// AI-assisted: see AI18, AI19, AI21
 bool Board::is_suicide(int16_t id, Color color, std::vector<int16_t> &opponent){       
     opponent.clear();
     
@@ -335,15 +361,17 @@ bool Board::is_suicide(int16_t id, Color color, std::vector<int16_t> &opponent){
         int nid = get(nr, nc);
         
 
-        
+        // AI-assisted: see AI19
         if (board[nid] == State::Empty){
             empty_cnt++;
             continue;
         }
         int root_nid = liberty_tracker.get(nid);
         if (board[nid] == my_state){
+            // AI-assisted: see AI16
             if (liberty_tracker.count_liberty(root_nid) > 1) valid_friendly_cnt++;
         }else{
+            // AI-assisted: see AI04
             if (std::find(opponent.begin(), opponent.end(), root_nid) == opponent.end()){
                 opponent.push_back(root_nid);
                 if (liberty_tracker.count_liberty(root_nid) == 1) valid_opponent_cnt++;
@@ -354,6 +382,7 @@ bool Board::is_suicide(int16_t id, Color color, std::vector<int16_t> &opponent){
     return empty_cnt == 0 && valid_friendly_cnt == 0 && valid_opponent_cnt == 0;
 }
 
+// AI-assisted: see AI03
 Board::Board(int sz){
     board_size = sz; 
     liberty_tracker = DSU(sz);  
@@ -362,6 +391,7 @@ Board::Board(int sz){
     st.reserve(cell_cnt);
 }
 
+// AI-assisted: see AI17
 bool Board::is_legal(int16_t curr_id, Color color)  {
     if (curr_id < 0 || curr_id >= cell_cnt || board[curr_id] != State::Empty) {
         return false;
@@ -389,6 +419,7 @@ bool Board::is_legal(int16_t curr_id, Color color)  {
     return true;
 }
 
+// AI-assisted: see AI17
 std::vector<int16_t> Board::get_legal_moves(Color color) {
     std::vector<int16_t> ans;
     ans.reserve(cell_cnt);
@@ -401,6 +432,7 @@ std::vector<int16_t> Board::get_legal_moves(Color color) {
     return ans;
 }
 
+// AI-assisted: see AI02, AI03, AI04, AI05, AI08, AI19
 MoveState Board::place(int16_t curr_id, Color color) {
     if (curr_id < 0 || curr_id >= cell_cnt) {
         return {MoveStatus::OutOfBounds};
@@ -445,6 +477,7 @@ MoveState Board::place(int16_t curr_id, Color color) {
     res.undo_state -> prev_hash = curr_hash;                // Save PREVIOUS hash
     res.undo_state -> dsu_cp = liberty_tracker.checkpoint();    // Save PREVIOUS DSU
 
+    // AI-assisted: see AI19
     liberty_tracker.reset(curr_id);
     board[curr_id] = my_state;
     curr_hash = tmp_hash;
@@ -462,6 +495,7 @@ MoveState Board::place(int16_t curr_id, Color color) {
         liberty_tracker.remove_liberty(opp_root, curr_id);
     }
 
+    // AI-assisted: see AI03
     for (int16_t dead_id : captured) {
         board[dead_id] = State::Empty;
 
@@ -481,6 +515,7 @@ MoveState Board::place(int16_t curr_id, Color color) {
         }
     }
 
+    // AI-assisted: see AI08
     if (color == Color::White) {
         white_cnt += 1;
         black_cnt -= static_cast<int>(captured.size());
@@ -493,6 +528,7 @@ MoveState Board::place(int16_t curr_id, Color color) {
     return res;
 }
 
+// AI-assisted: see AI05, AI08, AI20, AI23
 void Board::undo(const UndoState &state){
     if (state.type != MoveType::Place) return;
     board[state.id] = State::Empty;
@@ -500,10 +536,12 @@ void Board::undo(const UndoState &state){
     for (int16_t i: state.captured){
         board[i] = opp_state;
     }
+    // AI-assisted: see AI20
     liberty_tracker.rollback(state.dsu_cp);
     seen_hashes.erase(curr_hash);
     curr_hash = state.prev_hash;
 
+    // AI-assisted: see AI08
     if (state.color == Color::Black){
         black_cnt -= 1;
         white_cnt += static_cast<int>(state.captured.size());
@@ -529,6 +567,7 @@ State Board::get_cell(int r, int c) const {
     return board[get(r, c)];
 }
 
+// AI-assisted: see AI12
 void Board::display(std::ostream& os) const {
     os << "\n    ";
     for (int c = 0; c < board_size; ++c) {
@@ -559,6 +598,7 @@ void Board::display(std::ostream& os) const {
     os << "\n";
 }
 
+// AI-assisted: see AI08
 double Board::calculate_score(double komi) const{
     int score = white_cnt - black_cnt;
 
@@ -572,7 +612,7 @@ double Board::calculate_score(double komi) const{
     return static_cast<double>(score) + komi;
 }
 
-
+// AI-assisted: see AI26
 EndgameStatus HistoryTracker::is_game_over() const {
     int sz = undo_stack.size();
     if (sz == 0) return EndgameStatus::NotOver;
@@ -588,6 +628,7 @@ Color HistoryTracker::get_turn() const {
     return invertColor(undo_stack.back().color);
 }
 
+// AI-assisted: see AI05
 MoveStatus HistoryTracker::play_move(Board &board, int16_t id, Color color){
     if (is_game_over() != EndgameStatus::NotOver) return MoveStatus::GameEnded;
 
@@ -601,6 +642,7 @@ MoveStatus HistoryTracker::play_move(Board &board, int16_t id, Color color){
     return MoveStatus::Success;
 }
 
+// AI-assisted: see AI05, AI23
 bool HistoryTracker::undo_move(Board &board){
     if (undo_stack.empty()) return false;
 
@@ -614,6 +656,7 @@ bool HistoryTracker::undo_move(Board &board){
     return true;
 }
 
+// AI-assisted: see AI05
 bool HistoryTracker::redo_move(Board &board){
     if (redo_stack.empty()) return false;
     
@@ -631,6 +674,7 @@ bool HistoryTracker::redo_move(Board &board){
     return true;
 }
 
+// AI-assisted: see AI26
 bool HistoryTracker::pass(Color color){
     if (is_game_over() != EndgameStatus::NotOver) return false;
     undo_stack.push_back(UndoState(MoveType::Pass, color));
