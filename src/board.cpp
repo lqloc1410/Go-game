@@ -1,7 +1,7 @@
 #include "ui/board.hpp"
 #include <cmath>
 #include <vector>
-
+// AI-assisted: see AI33
 BoardView::BoardView(int boardSize, float pixelSize, sf::Vector2f origin)
     : n_(boardSize), size_(pixelSize), origin_(origin) {
     recompute();

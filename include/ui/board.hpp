@@ -5,6 +5,7 @@
 
 struct GridPos { int x, y; };
 
+// AI-assisted: see AI29, AI33
 class BoardView {
 public:
     BoardView(int boardSize = 9, float pixelSize = 800.f, sf::Vector2f origin = {0.f, 0.f});

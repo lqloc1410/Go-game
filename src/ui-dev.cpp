@@ -1,4 +1,4 @@
-#include <SFML/Graphics.hpp>
+#include <SFML/Graphics.hpp> // AI-assisted: see AI30
 #include <iomanip>
 #include <sstream>
 #include "mode/gameSession.hpp"
@@ -12,7 +12,7 @@ int main() {
     sf::RenderWindow window(sf::VideoMode(1150, 800), "Go UI - dev");
     window.setFramerateLimit(60);
 
-    window.setView(makeLetterboxView(window.getSize()));
+    window.setView(makeLetterboxView(window.getSize())); // AI-assisted: see AI36
 
 
     GameSession game(9);
