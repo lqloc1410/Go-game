@@ -39,6 +39,7 @@ std::optional<Color> StatetoColor(State state);
 State ColortoState(Color color);
 Color invertColor(Color color);
 
+// AI-assisted: see AI03
 // idk why tf this is here but keep it for later
 struct Point{
     int r = 0, c = 0;
@@ -46,6 +47,9 @@ struct Point{
 
     Point(int row, int col);
 };
+
+
+// AI-assisted: see AI11
 Point toPoint(int id, int sz);
 
 // Defines classes for Zorbist hashing for Superko (currently positional)
@@ -122,10 +126,12 @@ private:
     */
     std::array<std::bitset<CELL_CNT>, CELL_CNT> liberties{};
     
+    // AI-assisted: see AI02
     // Forms an implicit linked list for easy stone removal.
     std::array<int16_t, CELL_CNT> next_stone{};
     
 
+    // AI-assisted: see AI20
     // Storage for easy rollbacks
     enum class OpType : uint8_t{Reset, Join, BitFlip};
 
@@ -142,6 +148,7 @@ private:
 
     
 public:
+    // AI-assisted: see AI20
     struct Checkpoint { size_t op_idx; size_t bitset_idx; };
     Checkpoint checkpoint() const;
     DSU() = default;
@@ -156,16 +163,20 @@ public:
     void add_liberty(int16_t u, int16_t lib_cell);
     void remove_liberty(int16_t u, int16_t lib_cell);
 
+    // AI-assisted: see AI09
     // Function to clear a connected group containing u
     void clear_group(int u);
 
+    // AI-assisted: see AI10
     // Function to get a connected group.
     std::vector<int16_t> get_group(int u);
 
+    // AI-assisted: see AI10, AI19, AI20
     // CAUTION: Only safe to call on an isolated empty cell, 
     // or when looping over ALL members of an entire captured group.
     // Calling this on a single stone inside an active group will break everything!
     void reset(int16_t u);
+    // AI-assisted: see AI20
     void rollback(Checkpoint cp);
 };
 
@@ -175,6 +186,7 @@ enum class MoveStatus : int8_t{Success, Suicide, Ko, Occupied, OutOfBounds, Game
 
 enum class EndgameStatus : int8_t{Pass, Resignation, NotOver};
 
+// AI-assisted: see AI05, AI19
 struct UndoState{
     // Storing past moves for undos.
     MoveType type = MoveType::DEFAULT;
@@ -194,6 +206,7 @@ struct MoveState{
     std::optional<UndoState> undo_state = std::nullopt;
 };
 
+// AI-assisted: see AI26
 struct RedoState{
     // Storing past moves for redos.
     MoveType type = MoveType::DEFAULT;
@@ -209,6 +222,7 @@ private:
     int board_size{};
     int cell_cnt{};
 
+    // AI-assisted: see AI08
     // Counting stones for scoring.
     int white_cnt{};
     int black_cnt{};
@@ -230,25 +244,33 @@ private:
     // Helper to get cell id from (r, c)
     int get(int r, int c) const;
 
+    // AI-assisted: see AI08
     // Helper for territory counting
     int score_cnt_helper(int16_t id) const;
 
+    // AI-assisted: see AI04, AI13, AI16, AI18
     // Helper function to check if a move is suicide. 
     // This function also collects data of empty, friendly and opponent cells 
     bool is_suicide(int16_t id, Color color, std::vector<int16_t> &empty, std::vector<int16_t> &friendly, std::vector<int16_t> &opponent);
+    // AI-assisted: see AI18, AI19, AI21
     // Helper to check if a placement is suicide.
     // Also collects opponent roots to check hash.
     bool is_suicide(int16_t id, Color color, std::vector<int16_t> &opponent);
 
 public:
+    // AI-assisted: see AI03
     Board(int sz);
 
+    // AI-assisted: see AI17
     bool is_legal(int16_t curr_id, Color color);
 
+    // AI-assisted: see AI17
     std::vector<int16_t> get_legal_moves(Color color);
 
+    // AI-assisted: see AI02, AI03, AI04, AI05, AI08, AI19
     MoveState place(int16_t curr_id, Color color);
 
+    // AI-assisted: see AI05, AI08, AI20, AI23
     void undo(const UndoState &state);
 
     int get_white_cnt() const;
@@ -261,29 +283,38 @@ public:
 
     State get_cell(int r, int c) const;
 
+    // AI-assisted: see AI12
     void display(std::ostream& os = std::cout) const;
 
+    // AI-assisted: see AI08
     double calculate_score(double komi = 7.5) const;
 };
 
+// AI-assisted: see AI05
 class HistoryTracker{
 private:
     std::vector<UndoState> undo_stack;
     std::vector<RedoState> redo_stack;
 public:
+    // AI-assisted: see AI26
     EndgameStatus is_game_over() const;
 
     Color get_turn() const;
 
+    // AI-assisted: see AI05
     MoveStatus play_move(Board &board, int16_t id, Color color);
 
+    // AI-assisted: see AI05, AI23
     bool undo_move(Board &board);
 
+    // AI-assisted: see AI05
     bool redo_move(Board &board);
 
+    // AI-assisted: see AI26
     bool pass(Color color);
 
     bool resign(Color color);
 
     std::optional<Color> get_resigned_player();
 };
+
