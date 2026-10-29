@@ -249,9 +249,12 @@ RedoState::RedoState(int16_t inp_id, Color inp_color, MoveType inp_type){
     type = inp_type;
 }
 
-
-int Board::get(int r, int c) const{
+int16_t Board::get(int r, int c) const{
     return r*board_size + c;
+}
+
+int16_t Board::get(Point point) const{
+    return to_id(point.r, point.c);
 }
 
 // AI-assisted: see AI08
@@ -382,8 +385,9 @@ bool Board::is_suicide(int16_t id, Color color, std::vector<int16_t> &opponent){
 }
 
 // AI-assisted: see AI03
-Board::Board(int sz){
+Board::Board(int sz, double km){
     board_size = sz; 
+    komi = km;
     liberty_tracker = DSU(sz);  
     seen_hashes.insert(curr_hash);
     cell_cnt = board_size*board_size;
@@ -527,6 +531,11 @@ MoveState Board::place(int16_t curr_id, Color color) {
     return res;
 }
 
+MoveState Board::place(Point point, Color color){
+    return place(get(point), color);
+}
+
+
 // AI-assisted: see AI05, AI08, AI20, AI23
 void Board::undo(const UndoState &state){
     if (state.type != MoveType::Place) return;
@@ -555,6 +564,8 @@ int Board::get_white_cnt() const {return white_cnt;}
 int Board::get_black_cnt() const {return black_cnt;}
 
 int Board::get_size() const {return board_size;}
+
+double Board::get_komi() const {return komi;}
 
 int16_t Board::to_id(int r, int c) const {
     if (r < 0 || c < 0 || r >= board_size || c >= board_size) return -1;
@@ -598,7 +609,7 @@ void Board::display(std::ostream& os) const {
 }
 
 // AI-assisted: see AI08
-double Board::calculate_score(double komi) const{
+double Board::calculate_score() const{
     int score = white_cnt - black_cnt;
 
     visited.fill(false);
@@ -609,6 +620,11 @@ double Board::calculate_score(double komi) const{
     }
 
     return static_cast<double>(score) + komi;
+}
+
+HistoryTracker::HistoryTracker(int handicap, Color start_turn) {
+    handicap_cnt = handicap;
+    current_turn = start_turn;
 }
 
 // AI-assisted: see AI26
@@ -623,7 +639,8 @@ EndgameStatus HistoryTracker::is_game_over() const {
 }
 
 Color HistoryTracker::get_turn() const {
-    if (undo_stack.empty()) return Color::Black;
+    if (static_cast<int>(undo_stack.size()) < handicap_cnt) return Color::Black;
+    if (static_cast<int>(undo_stack.size()) == handicap_cnt) return current_turn;
     return invertColor(undo_stack.back().color);
 }
 

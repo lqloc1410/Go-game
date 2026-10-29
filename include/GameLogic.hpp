@@ -11,6 +11,7 @@
 #include <random>
 #include <utility>
 #include <queue>
+#include <string>
 
 // Because Go can have a 19x19 board, we set max size here.
 const int MAX_BOARD_WIDTH = 19;
@@ -180,9 +181,20 @@ public:
     void rollback(Checkpoint cp);
 };
 
-enum class MoveType : int8_t{Place, Pass, Resign, DEFAULT};
+enum class MoveType : int8_t{Place, Pass, Resign, Setup, DEFAULT};
 
 enum class MoveStatus : int8_t{Success, Suicide, Ko, Occupied, OutOfBounds, GameEnded};
+inline std::string MStatus_to_str(MoveStatus status){
+    switch (status){
+        case MoveStatus::Success: return "Success";
+        case MoveStatus::Suicide: return "Suicide";
+        case MoveStatus::Ko: return "Ko/Superko violation";
+        case MoveStatus::Occupied: return "Cell already occupied";
+        case MoveStatus::GameEnded: return "Game already ended";
+        case MoveStatus::OutOfBounds: return "Out of bounds";
+        default: return "Unknown error";
+    }
+}
 
 enum class EndgameStatus : int8_t{Pass, Resignation, NotOver};
 
@@ -227,6 +239,9 @@ private:
     int white_cnt{};
     int black_cnt{};
 
+    // Komi tracker
+    double komi = 7.5;
+
     // implemeted flat array for better cache locality.
     std::array<State, CELL_CNT> board{};
 
@@ -241,9 +256,6 @@ private:
     mutable std::vector<int> st;
     mutable std::array<bool, CELL_CNT> visited{};
 
-    // Helper to get cell id from (r, c)
-    int get(int r, int c) const;
-
     // AI-assisted: see AI08
     // Helper for territory counting
     int score_cnt_helper(int16_t id) const;
@@ -257,9 +269,14 @@ private:
     // Also collects opponent roots to check hash.
     bool is_suicide(int16_t id, Color color, std::vector<int16_t> &opponent);
 
+    // Helper to get cell id from r, c
+    int16_t get(int r, int c) const;
 public:
     // AI-assisted: see AI03
-    Board(int sz);
+    Board(int sz = 19, double km = 7.5);
+
+    // Helper to get cell id from Point
+    int16_t get(Point point) const;
 
     // AI-assisted: see AI17
     bool is_legal(int16_t curr_id, Color color);
@@ -270,6 +287,8 @@ public:
     // AI-assisted: see AI02, AI03, AI04, AI05, AI08, AI19
     MoveState place(int16_t curr_id, Color color);
 
+    MoveState place(Point point, Color color);
+
     // AI-assisted: see AI05, AI08, AI20, AI23
     void undo(const UndoState &state);
 
@@ -279,6 +298,8 @@ public:
 
     int get_size() const;
 
+    double get_komi() const;
+
     int16_t to_id(int r, int c) const;
 
     State get_cell(int r, int c) const;
@@ -287,15 +308,20 @@ public:
     void display(std::ostream& os = std::cout) const;
 
     // AI-assisted: see AI08
-    double calculate_score(double komi = 7.5) const;
+    double calculate_score() const;
 };
 
 // AI-assisted: see AI05
 class HistoryTracker{
 private:
+    int handicap_cnt{};
+    Color current_turn = Color::Black;
+
     std::vector<UndoState> undo_stack;
     std::vector<RedoState> redo_stack;
 public:
+    HistoryTracker(int handicap = 0, Color start_turn = Color::Black);
+
     // AI-assisted: see AI26
     EndgameStatus is_game_over() const;
 

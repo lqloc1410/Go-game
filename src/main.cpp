@@ -1,4 +1,5 @@
 #include "GameLogic.hpp"
+#include "GameParser.hpp"
 #include <iostream>
 #include <string>
 #include <sstream>
@@ -10,6 +11,7 @@ static void print_help() {
     std::cout << "\nCommands:\n"
               << "  <r> <c>      : Play at 0-indexed (row, col), e.g. '3 4'\n"
               << "  <Col><Row>   : Play at Go coordinate, e.g. 'D4', 'E5', 'Q16'\n"
+              << "  load <file>  : Load game from an SGF file (or 'l <file>')\n"
               << "  pass   (p)   : Pass turn (2 consecutive passes end the game)\n"
               << "  resign       : Resign the game\n"
               << "  undo   (u)   : Undo the last move\n"
@@ -19,8 +21,9 @@ static void print_help() {
               << "  quit   (q)   : Exit the game\n";
 }
 
-static void print_score(const Board& board, double komi) {
-    double score = board.calculate_score(komi);
+static void print_score(const Board& board) {
+    double score = board.calculate_score();
+    double komi = board.get_komi();
     std::cout << "\n================ Area Score (Komi: " << komi << ") ================\n";
     std::cout << "Stones on Board -> Black (X): " << board.get_black_cnt()
               << " | White (O): " << board.get_white_cnt() << "\n";
@@ -34,6 +37,35 @@ static void print_score(const Board& board, double komi) {
         std::cout << ">>> Result: Draw (Jigo)!\n";
     }
     std::cout << "==============================================================\n";
+}
+
+// AI-assisted: helper to load SGF file safely into temporary objects before replacing state
+static bool load_sgf_file(const std::string& filepath, Board& board, HistoryTracker& history, GameLog& log) {
+    auto raw_sgf = read_file_to_string(filepath);
+    if (!raw_sgf.has_value()) {
+        std::cout << ">> File reading failed: could not open '" << filepath << "'.\n";
+        return false;
+    }
+
+    GameLog temp_log;
+    if (!temp_log.parse(*raw_sgf)) {
+        std::cout << ">> SGF parsing failed: invalid syntax or unsupported format.\n";
+        return false;
+    }
+
+    Board temp_board;
+    HistoryTracker temp_history;
+    if (!temp_log.load_board_data(temp_board, temp_history)) {
+        std::cout << ">> Board loading failed: move replay rule violation.\n";
+        return false;
+    }
+
+    board = std::move(temp_board);
+    history = std::move(temp_history);
+    log = std::move(temp_log);
+    std::cout << ">> Successfully loaded: " << filepath << "\n";
+    //std::cout << log << "\n";
+    return true;
 }
 
 static bool parse_move(const std::string& line, const Board& board, int16_t& out_id) {
@@ -86,30 +118,71 @@ static bool parse_move(const std::string& line, const Board& board, int16_t& out
     return false;
 }
 
-int main() {
+int main(int argc, char* argv[]) {
     std::cout << "==============================================================\n";
     std::cout << "                     Go Game CLI Engine                       \n";
     std::cout << "==============================================================\n";
 
-    int board_size = 9;
-    std::cout << "Enter board size [2-" << MAX_BOARD_WIDTH << "] (default 9): ";
-    std::string sz_line;
-    if (std::getline(std::cin, sz_line) && !sz_line.empty()) {
-        try {
-            int val = std::stoi(sz_line);
-            if (val >= 2 && val <= MAX_BOARD_WIDTH) {
-                board_size = val;
-            } else {
-                std::cout << "Invalid size, defaulting to 9x9.\n";
-            }
-        } catch (...) {
-            std::cout << "Invalid input, defaulting to 9x9.\n";
+    Board board(9);
+    HistoryTracker history;
+    GameLog log;
+    bool loaded = false;
+
+    // Check if an SGF file was passed via command line argument
+    if (argc > 1) {
+        std::string filepath = argv[1];
+        if (load_sgf_file(filepath, board, history, log)) {
+            loaded = true;
+        } else {
+            std::cout << "Falling back to new game setup.\n";
         }
     }
 
-    double komi = 7.5;
-    Board board(board_size);
-    HistoryTracker history;
+    if (!loaded) {
+        std::cout << "Enter board size [2-" << MAX_BOARD_WIDTH << "] (default 9), or 'load <filepath>': ";
+        std::string sz_line;
+        if (std::getline(std::cin, sz_line) && !sz_line.empty()) {
+            sz_line = strip(sz_line);
+            std::string sz_lower = sz_line;
+            for (char& ch : sz_lower) {
+                ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+            }
+
+            // Check if user entered 'load <file>' or a direct .sgf file path
+            if (sz_lower.rfind("load ", 0) == 0 || sz_lower.rfind("l ", 0) == 0 ||
+                (sz_line.size() > 4 && sz_line.substr(sz_line.size() - 4) == ".sgf")) {
+                std::string path = sz_line;
+                if (sz_lower.rfind("load ", 0) == 0) path = strip(sz_line.substr(5));
+                else if (sz_lower.rfind("l ", 0) == 0) path = strip(sz_line.substr(2));
+
+                if (path.size() >= 2 && path.front() == '"' && path.back() == '"') {
+                    path = path.substr(1, path.size() - 2);
+                }
+                if (load_sgf_file(path, board, history, log)) {
+                    loaded = true;
+                }
+            }
+
+            if (!loaded) {
+                int board_size = 9;
+                try {
+                    int val = std::stoi(sz_line);
+                    if (val >= 2 && val <= MAX_BOARD_WIDTH) {
+                        board_size = val;
+                    } else {
+                        std::cout << "Invalid size, defaulting to 9x9.\n";
+                    }
+                } catch (...) {
+                    std::cout << "Invalid input, defaulting to 9x9.\n";
+                }
+                board = Board(board_size);
+                history = HistoryTracker();
+            }
+        } else {
+            board = Board(9);
+            history = HistoryTracker();
+        }
+    }
 
     print_help();
 
@@ -125,8 +198,8 @@ int main() {
         EndgameStatus endgame = history.is_game_over();
         if (endgame == EndgameStatus::Pass) {
             std::cout << "\n*** Game Over (Both players passed consecutively) ***\n";
-            print_score(board, komi);
-            std::cout << "Enter 'undo' (u) to resume or 'quit' (q) to exit: ";
+            print_score(board);
+            std::cout << "Enter 'undo' (u) to resume, 'load <file>' to load, or 'quit' (q) to exit: ";
         } else if (endgame == EndgameStatus::Resignation) {
             std::optional<Color> resigned = history.get_resigned_player();
             const char* loser_str = (resigned == Color::Black) ? "Black (X)" : "White (O)";
@@ -134,7 +207,7 @@ int main() {
             const char* code_str = (resigned == Color::Black) ? "W+R" : "B+R";
             std::cout << "\n*** Game Over (" << loser_str << " resigned) ***\n";
             std::cout << ">>> Result: " << winner_str << " wins by resignation (" << code_str << ")!\n";
-            std::cout << "Enter 'undo' (u) to resume or 'quit' (q) to exit: ";
+            std::cout << "Enter 'undo' (u) to resume, 'load <file>' to load, or 'quit' (q) to exit: ";
         } else {
             std::cout << "[" << turn_str << "] Enter move or command: ";
         }
@@ -158,7 +231,14 @@ int main() {
         } else if (cmd_lower == "help" || cmd_lower == "h") {
             print_help();
         } else if (cmd_lower == "score" || cmd_lower == "s") {
-            print_score(board, komi);
+            print_score(board);
+        } else if (cmd_lower.rfind("load ", 0) == 0 || cmd_lower.rfind("l ", 0) == 0) {
+            size_t space_pos = cmd.find(' ');
+            std::string path = strip(cmd.substr(space_pos + 1));
+            if (path.size() >= 2 && path.front() == '"' && path.back() == '"') {
+                path = path.substr(1, path.size() - 2);
+            }
+            load_sgf_file(path, board, history, log);
         } else if (cmd_lower == "undo" || cmd_lower == "u") {
             if (history.undo_move(board)) {
                 std::cout << ">> Undid last move.\n";
@@ -185,7 +265,7 @@ int main() {
             }
         } else {
             if (history.is_game_over() != EndgameStatus::NotOver) {
-                std::cout << ">> Game is over! Use 'undo' or 'quit'.\n";
+                std::cout << ">> Game is over! Use 'undo', 'load <file>', or 'quit'.\n";
                 continue;
             }
 
@@ -198,7 +278,7 @@ int main() {
             MoveStatus status = history.play_move(board, move_id, turn);
             switch (status) {
                 case MoveStatus::Success: {
-                    Point pt = toPoint(move_id, board_size);
+                    Point pt = toPoint(move_id, board.get_size());
                     std::cout << ">> " << turn_str << " placed at (" << pt.r << ", " << pt.c << ").\n";
                     break;
                 }
