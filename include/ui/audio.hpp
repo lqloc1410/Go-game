@@ -10,9 +10,7 @@ class Audio {
         void setSfxVolume(float v);
         void setMusicOn(bool on);
         void setMusicVolume(float v);
-        float sfxVolume() const {
-            return sfxVolume();
-        }
+        float getSfxVolume();
     private:
         sf::Music bgm;
         sf::SoundBuffer stonebuf, capturebuf, errorbuf;

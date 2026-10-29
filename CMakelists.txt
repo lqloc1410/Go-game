@@ -10,7 +10,7 @@ set(SFML_BUILD_NETWORK OFF CACHE BOOL "" FORCE)
 FetchContent_Declare(SFML
     GIT_REPOSITORY https://github.com/SFML/SFML.git
     GIT_TAG 2.6.1)
-set(SFML_USE_SYSTEM_DEPS ON CACHE BOOL "" FORCE)
+set(SFML_USE_SYSTEM_DEPS OFF CACHE BOOL "" FORCE)
 
 if(SFML_USE_SYSTEM_DEPS)
     list(APPEND CMAKE_IGNORE_PATH
@@ -60,6 +60,13 @@ function(add_go_program e)
     add_custom_command(TARGET ${e} POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_directory
         ${CMAKE_SOURCE_DIR}/assets $<TARGET_FILE_DIR:${e}>/assets)
+
+    if(WIN32)
+        add_custom_command(TARGET ${e} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_BINARY_DIR}/_deps/sfml-src/extlibs/bin/x64/openal32.dll"
+            $<TARGET_FILE_DIR:${e}>)
+    endif()
 endfunction()
 
 add_go_program(main)

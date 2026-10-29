@@ -1,6 +1,20 @@
 #include <iostream>
 #include <ui/audio.hpp>
 
+#if defined(_WIN32) && defined(_UCRT)
+#include <stdio.h>
+extern "C" {
+    static FILE* __cdecl ucrt_iob_func(void) {
+        static FILE files[3];
+        files[0] = *stdin;
+        files[1] = *stdout;
+        files[2] = *stderr;
+        return files;
+    }
+    void* __imp___iob_func = (void*)&ucrt_iob_func;
+}
+#endif
+
 static bool loadSfx(sf::SoundBuffer& buf, sf::Sound& snd, const char* path) {
     if (!buf.loadFromFile(path)) {
         std::cerr << "Could not load sound: " << path << '\n';
