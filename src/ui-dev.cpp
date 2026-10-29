@@ -1,18 +1,20 @@
-#include <SFML/Graphics.hpp>
+#include <SFML/Graphics.hpp> // AI-assisted: see AI30
 #include <iomanip>
 #include <sstream>
+#include <thread>
 #include "mode/gameSession.hpp"
 #include "ui/board.hpp"
 #include "ui/hudView.hpp"
 #include "ui/fonts.hpp"
 #include "ui/layout.hpp"
+#include "ui/audio.hpp"
 
 int main() {
-    
+
     sf::RenderWindow window(sf::VideoMode(1150, 800), "Go UI - dev");
     window.setFramerateLimit(60);
 
-    window.setView(makeLetterboxView(window.getSize()));
+    window.setView(makeLetterboxView(window.getSize())); // AI-assisted: see AI36
 
 
     GameSession game(9);
@@ -22,6 +24,8 @@ int main() {
     if (!fonts.load()) return 1;
     hudView hud(fonts);
 
+    Audio audio;
+    if (!audio.load()) std::cerr << "Some audio failed to load" << '\n';
     auto stoneAt = [&](int x, int y) { return game.stoneAt(x, y); };
 
     // Báo kết quả đúng một lần khi ván vừa kết thúc
@@ -58,12 +62,24 @@ int main() {
                     MoveInfo m = game.play(p->x, p->y);
                     switch (m.result) {
                         case MoveResult::Ok:
-                            if (m.captured > 0)
+                            if (m.captured > 0) {
                                 hud.push("Captured " + std::to_string(m.captured) + " stones!");
+                                audio.playCapture();
+                            }
+                            else audio.playStone();                            
                             break;
-                        case MoveResult::Occupied: hud.push("That point is already occupied"); break;
-                        case MoveResult::Invalid:  hud.push("Invalid move (Ko or suicide)"); break;
-                        case MoveResult::GameOver: hud.push("The game is over"); break;
+                        case MoveResult::Occupied: 
+                            hud.push("That point is already occupied");
+                            audio.playError(); 
+                            break;
+                        case MoveResult::Invalid:  
+                            hud.push("Invalid move (Ko or suicide)");
+                            audio.playError(); 
+                            break;
+                        case MoveResult::GameOver: 
+                            hud.push("The game is over"); 
+                            audio.playError();
+                            break;
                         default: break;
                     }
                     checkEnd();

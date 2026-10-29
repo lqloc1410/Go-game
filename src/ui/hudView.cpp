@@ -14,7 +14,7 @@ void hudView::update(float dt) {
     for (auto& t : toasts_) t.left -= dt;
     while (!toasts_.empty() && toasts_.front().left <= 0.f) toasts_.pop_front();
 }
-
+// AI-assisted: see AI20. AI35
 void hudView::draw(sf::RenderWindow& w, float panelX, int currentPlayer,
                    bool gameOver, int blackStones, int whiteStones) const {
     auto text = [&](const sf::Font& font, const std::string& s, float x, float y,

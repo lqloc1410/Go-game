@@ -1,6 +1,8 @@
 #pragma once
 #include <SFML/Graphics.hpp>
 
+// AI-assisted: see AI36
+
 constexpr float kVirtualW = 1150.f;
 constexpr float kVirtualH = 800.f;
 

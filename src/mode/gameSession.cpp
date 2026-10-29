@@ -1,5 +1,7 @@
 #include "mode/gameSession.hpp"
 
+// AI-assisted: see AI34
+
 void GameSession::newGame(int boardSize) {
     size_ = boardSize;
     board_ = std::make_unique<Board>(boardSize);

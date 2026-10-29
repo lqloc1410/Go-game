@@ -10,6 +10,30 @@ set(SFML_BUILD_NETWORK OFF CACHE BOOL "" FORCE)
 FetchContent_Declare(SFML
     GIT_REPOSITORY https://github.com/SFML/SFML.git
     GIT_TAG 2.6.1)
+set(SFML_USE_SYSTEM_DEPS ON CACHE BOOL "" FORCE)
+
+if(SFML_USE_SYSTEM_DEPS)
+    list(APPEND CMAKE_IGNORE_PATH
+        "${CMAKE_BINARY_DIR}/_deps/sfml-src/extlibs/headers"
+        "${CMAKE_BINARY_DIR}/_deps/sfml-src/extlibs/libs-mingw/x64"
+        "${CMAKE_BINARY_DIR}/_deps/sfml-src/extlibs/libs-mingw/x86"
+    )
+
+    set(SFML_DEPENDENCY_CACHE_VARS
+        FLAC_INCLUDE_DIR FLAC_LIBRARY
+        FREETYPE_INCLUDE_DIR_ft2build FREETYPE_INCLUDE_DIR_freetype2 FREETYPE_LIBRARY
+        OGG_INCLUDE_DIR OGG_LIBRARY
+        OPENAL_INCLUDE_DIR OPENAL_LIBRARY
+        VORBIS_INCLUDE_DIR VORBIS_LIBRARY VORBISFILE_LIBRARY VORBISENC_LIBRARY
+    )
+
+    foreach(SFML_DEPENDENCY_VAR IN LISTS SFML_DEPENDENCY_CACHE_VARS)
+        if("${${SFML_DEPENDENCY_VAR}}" MATCHES "extlibs")
+            unset(${SFML_DEPENDENCY_VAR} CACHE)
+        endif()
+    endforeach()
+endif()
+
 FetchContent_MakeAvailable(SFML)
 
 set (SOURCES
@@ -18,6 +42,7 @@ set (SOURCES
     src/ui/hudView.cpp
     src/board.cpp
     src/GameLogic.cpp
+    src/ui/audio.cpp
 )
 
 add_library(GoCore STATIC ${SOURCES})
