@@ -72,7 +72,7 @@ void menuView::onClick(int i) {
         case page::Mode:
             if (i == 0) {
                 cfg.mode = gameMode::PvP;
-                backtoMain();
+                page = page::boardSize;
             }
 
             else if (i == 1) {
@@ -81,12 +81,14 @@ void menuView::onClick(int i) {
             }
             else backtoMain();
             break;
+
         case page::Difficulty:
             if (i==3) page = page::Mode;
             else {
                 cfg.difficulty = static_cast<difficulty>(i);
-                backtoMain();
+                page = page::boardSize;
             }
+            break;
     }
 }
 

@@ -26,8 +26,9 @@ int main() {
     if (!fonts.load()) return 1;
     hudView hud(fonts);
 
-    enum class screen { Menu, Game};
+    enum class screen { Menu, Game, Placeholder}; //Placeholder is temporary for Saved game and Settings
     screen screen = screen::Menu;
+    std::string placeholderTitle;
     bool gameStarted = false;
     gameCfg cfg;
     menuView menu(fonts, cfg);
@@ -75,13 +76,24 @@ int main() {
                     case menuAction::resume:
                         screen = screen::Game;
                         break;
+                    case menuAction::openSaved: 
+                        placeholderTitle = "Saved game";
+                        screen = screen::Placeholder;
+                        break;
+                    case menuAction::settings:
+                        placeholderTitle = "Settings";
+                        screen = screen::Placeholder;
+                        break;
                     case menuAction::None:
                         break;
                 }
                 continue;
             }
 
-            
+            if (screen == screen::Placeholder) {
+                if (e.type == sf::Event::KeyPressed && e.key.code == sf::Keyboard::Escape) screen = screen::Menu;
+                continue;
+            }
 
             if (e.type == sf::Event::MouseMoved)
                 board.setHover(board.pixelToGrid(mouse));
@@ -141,6 +153,12 @@ int main() {
         switch (screen) {
             case screen::Menu: 
                 menu.draw(window);
+                break;
+
+            case screen::Placeholder:
+                textCentered(window, placeholderTitle, fonts.title, 48, {575.f, 250.f}, sf::Color(240, 220, 170));
+                textCentered(window, "Coming soon", fonts.body, 26, {575.f, 340.f}, sf::Color(200, 200, 200));
+                textCentered(window, "(Press Esc to go back)", fonts.body, 26, {575.f, 380.f}, sf::Color(150, 150, 155));
                 break;
 
             case screen::Game:
