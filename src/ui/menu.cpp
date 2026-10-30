@@ -1,6 +1,8 @@
 #include "ui/menu.hpp"
 #include "ui/render.hpp"
 
+// AI-assisted: see AI43, AI44
+
 namespace {
     const sf::Vector2f coeffButton(380.f, 60.f);
     sf::Vector2f slot(int i) {

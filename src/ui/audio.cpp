@@ -1,3 +1,4 @@
+// AI-assisted: see AI39
 #include <iostream>
 #include <ui/audio.hpp>
 
@@ -23,7 +24,6 @@ static bool loadSfx(sf::SoundBuffer& buf, sf::Sound& snd, const char* path) {
     snd.setBuffer(buf);
     return true;
 }
-
 
 bool Audio::load() {
     bool check = true;

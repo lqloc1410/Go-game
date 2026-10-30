@@ -1,5 +1,5 @@
 #pragma once
-
+// AI-assisted: see AI43, AI44
 enum class gameMode { PvP, PvAI };
 enum class difficulty { Easy, Medium, Hard };
 

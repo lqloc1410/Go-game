@@ -26,6 +26,8 @@ int main() {
     if (!fonts.load()) return 1;
     hudView hud(fonts);
 
+    // AI-assisted: see AI43, AI44
+
     enum class screen { Menu, Game, Placeholder}; //Placeholder is temporary for Saved game and Settings
     screen screen = screen::Menu;
     std::string placeholderTitle;
@@ -61,6 +63,8 @@ int main() {
             if (e.type == sf::Event::Closed) window.close();
 
             sf::Vector2f mouse = window.mapPixelToCoords(sf::Mouse::getPosition(window));
+
+            // AI-assisted: see AI43, AI44
 
             if (screen == screen::Menu) {
                 menu.handleEvent(e, mouse);
@@ -149,8 +153,8 @@ int main() {
 
         hud.update(clock.restart().asSeconds());
 
-        window.clear(sf::Color(40, 40, 40));
-        switch (screen) {
+        window.clear(sf::Color(40, 40, 40)); 
+        switch (screen) { // AI-assisted: see AI43, AI44
             case screen::Menu: 
                 menu.draw(window);
                 break;

@@ -1,5 +1,7 @@
 #include "ui/button.hpp"
 
+// AI-assisted: see AI43, AI44
+
 button::button(const std::string& label, sf::Vector2f center, sf::Vector2f size, const sf::Font& font) {
     box.setSize(size);
     box.setOrigin(size.x / 2.f, size.y / 2.f);

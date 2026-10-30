@@ -1,3 +1,5 @@
+// AI-assisted: see AI43, AI44
+
 #pragma once
 #include <string>
 #include <vector>
