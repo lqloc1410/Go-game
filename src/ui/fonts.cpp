@@ -2,7 +2,7 @@
 #include <iostream>
 
 bool Fonts::load(const std::string& dir) {
-    const std::string titleFile = "CinzelDecorative-Regular.ttf";
+    const std::string titleFile = "CinzelDecorative-Bold.ttf";
     const std::string bodyFile  = "FaunaOne-Regular.ttf";
 
     bool ok = true;

@@ -40,9 +40,11 @@ set (SOURCES
     src/mode/gameSession.cpp
     src/ui/fonts.cpp
     src/ui/hudView.cpp
-    src/board.cpp
+    src/ui/board.cpp
     src/GameLogic.cpp
     src/ui/audio.cpp
+    src/ui/button.cpp
+    src/ui/menu.cpp
 )
 
 add_library(GoCore STATIC ${SOURCES})

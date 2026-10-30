@@ -8,6 +8,8 @@
 #include "ui/fonts.hpp"
 #include "ui/layout.hpp"
 #include "ui/audio.hpp"
+#include "ui/menu.hpp"
+#include "ui/render.hpp"
 
 int main() {
 
@@ -23,6 +25,12 @@ int main() {
     Fonts fonts;
     if (!fonts.load()) return 1;
     hudView hud(fonts);
+
+    enum class screen { Menu, Game};
+    screen screen = screen::Menu;
+    bool gameStarted = false;
+    gameCfg cfg;
+    menuView menu(fonts, cfg);
 
     Audio audio;
     if (!audio.load()) std::cerr << "Some audio failed to load" << '\n';
@@ -53,11 +61,32 @@ int main() {
 
             sf::Vector2f mouse = window.mapPixelToCoords(sf::Mouse::getPosition(window));
 
+            if (screen == screen::Menu) {
+                menu.handleEvent(e, mouse);
+                switch (menu.takeAction()) {
+                    case menuAction::newGame:
+                        game.newGame(cfg.boardSize);
+                        board.setBoardSize(cfg.boardSize);
+                        board.setHover(std::nullopt);
+                        over = false;
+                        gameStarted = true;
+                        screen = screen::Game;
+                        break;
+                    case menuAction::resume:
+                        screen = screen::Game;
+                        break;
+                    case menuAction::None:
+                        break;
+                }
+                continue;
+            }
+
+            
+
             if (e.type == sf::Event::MouseMoved)
                 board.setHover(board.pixelToGrid(mouse));
 
-            if (e.type == sf::Event::MouseButtonPressed &&
-                e.mouseButton.button == sf::Mouse::Left) {
+            if (e.type == sf::Event::MouseButtonPressed && e.mouseButton.button == sf::Mouse::Left) {
                 if (auto p = board.pixelToGrid(mouse)) {
                     MoveInfo m = game.play(p->x, p->y);
                     switch (m.result) {
@@ -88,6 +117,7 @@ int main() {
 
             if (e.type == sf::Event::KeyPressed) {
                 switch (e.key.code) {
+                    case sf::Keyboard::Escape: screen = screen::Menu; break;
                     case sf::Keyboard::P: {
                         int who = game.currentPlayer();
                         if (game.pass()) hud.push(who == 1 ? "Black passed" : "White passed");
@@ -95,19 +125,28 @@ int main() {
                     }
                     case sf::Keyboard::U: if (!game.undo()) hud.push("Nothing to undo"); break;
                     case sf::Keyboard::R: if (!game.redo()) hud.push("Nothing to redo"); break;
-                    case sf::Keyboard::N: game.newGame(19); hud.push("New game"); break;
+                    case sf::Keyboard::N: game.newGame(game.size()); hud.push("New game"); break;
                     default: break;
                 }
                 checkEnd();
             }
         }
 
+        sf::Vector2f mouseNow = window.mapPixelToCoords(sf::Mouse::getPosition(window));
+            if (screen == screen::Menu) menu.update(mouseNow, gameStarted && !game.isGameOver());
+
         hud.update(clock.restart().asSeconds());
 
         window.clear(sf::Color(40, 40, 40));
-        board.draw(window, stoneAt, game.currentPlayer());
-        hud.draw(window, 800.f, game.currentPlayer(), game.isGameOver(),
-                 game.blackStones(), game.whiteStones());
+        switch (screen) {
+            case screen::Menu: 
+                menu.draw(window);
+                break;
+
+            case screen::Game:
+                board.draw(window, stoneAt, game.currentPlayer());
+                hud.draw(window, 800.f, game.currentPlayer(), game.isGameOver(), game.blackStones(), game.whiteStones());
+        }
         window.display();
     }
 }
