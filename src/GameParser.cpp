@@ -19,6 +19,41 @@ std::string ruleset_to_string(Ruleset ruleset){
     else return "Other";
 }
 
+// AI-generated
+std::string GameResult::to_sgf_string() const {
+    if (reason == ResultType::Draw) return "Draw";
+    if (reason == ResultType::Void) return "Void";
+    if (reason == ResultType::Unknown) return "?";
+    if (!winner.has_value()) return "";
+
+    std::string prefix = (*winner == Color::Black) ? "B+" : "W+";
+    if (reason == ResultType::Resignation) return prefix + "R";
+    if (reason == ResultType::Timeout) return prefix + "T";
+    if (reason == ResultType::Disqualification) return prefix + "F";
+    if (reason == ResultType::Score) {
+        std::ostringstream ss;
+        ss << score;
+        return prefix + ss.str();
+    }
+    return "";
+}
+
+// AI-generated
+std::string point_to_sgf(Point p) {
+    if (p.r < 0 || p.c < 0) return "";
+    return std::string{static_cast<char>('a' + p.c), static_cast<char>('a' + p.r)};
+}
+
+// AI-generated
+std::string escape_sgf_text(const std::string& in) {
+    std::string out;
+    for (char c : in) {
+        if (c == ']' || c == '\\') out += '\\';
+        out += c;
+    }
+    return out;
+}
+
 std::vector<std::string> split(const std::string &input, char separator){
     std::vector<std::string> res;
     std::string curr{};
@@ -119,39 +154,39 @@ std::optional<Point> GameLog::parse_sgf_point(const std::string &val){
     }
 
 std::optional<GameResult> GameLog::parse_sgf_result(const std::string &val){
-        if (strip(val).empty()) return GameResult();
-        std::vector<std::string> tokens = split(val, '+');
-        for (std::string &s: tokens){
-            s = strip(s);
-        }
-        GameResult result;
-        if (tokens[0] == "B" || tokens[0] == "W"){
-            result.winner = tokens[0] == "B" ? Color::Black : Color::White;
-
-            if (tokens.size() != 2 || tokens[1].empty()) return std::nullopt;
-
-            if (tokens[1] == "R" || tokens[1] == "Resign") result.reason = ResultType::Resignation;
-            else if (tokens[1] == "T" || tokens[1] == "Time") result.reason = ResultType::Timeout;
-            else if (tokens[1] == "F" || tokens[1] == "Forfeit") result.reason = ResultType::Disqualification;
-            else{
-                std::optional<double> score = to_double(tokens[1]);
-                if (!score.has_value() || *score <= 0) return std::nullopt;
-                result.reason = ResultType::Score;
-                result.score = *score;
-            }
-        }else if (tokens[0] == "0" || tokens[0] == "Draw"){
-            if (tokens.size() != 1) return std::nullopt;
-            result.reason = ResultType::Draw;
-        }else if (tokens[0] == "Void"){
-            if (tokens.size() != 1) return std::nullopt;
-            result.reason = ResultType::Void;
-        }else if (tokens[0] == "?"){
-            if (tokens.size() != 1) return std::nullopt;
-            result.reason = ResultType::Unknown;
-        }else return std::nullopt;
-
-        return result;
+    if (strip(val).empty()) return GameResult();
+    std::vector<std::string> tokens = split(val, '+');
+    for (std::string &s: tokens){
+        s = strip(s);
     }
+    GameResult res;
+    if (tokens[0] == "B" || tokens[0] == "W"){
+        res.winner = tokens[0] == "B" ? Color::Black : Color::White;
+
+        if (tokens.size() != 2 || tokens[1].empty()) return std::nullopt;
+
+        if (tokens[1] == "R" || tokens[1] == "Resign") res.reason = ResultType::Resignation;
+        else if (tokens[1] == "T" || tokens[1] == "Time") res.reason = ResultType::Timeout;
+        else if (tokens[1] == "F" || tokens[1] == "Forfeit") res.reason = ResultType::Disqualification;
+        else{
+            std::optional<double> score = to_double(tokens[1]);
+            if (!score.has_value() || *score <= 0) return std::nullopt;
+            res.reason = ResultType::Score;
+            res.score = *score;
+        }
+    }else if (tokens[0] == "0" || tokens[0] == "Draw"){
+        if (tokens.size() != 1) return std::nullopt;
+        res.reason = ResultType::Draw;
+    }else if (tokens[0] == "Void"){
+        if (tokens.size() != 1) return std::nullopt;
+        res.reason = ResultType::Void;
+    }else if (tokens[0] == "?"){
+        if (tokens.size() != 1) return std::nullopt;
+        res.reason = ResultType::Unknown;
+    }else return std::nullopt;
+
+    return res;
+}
 
 bool GameLog::handle_property(const std::string &tag, const std::vector<std::string> &vals){
     if (vals.empty()) return false;
@@ -289,14 +324,14 @@ bool GameLog::parse(const std::string &raw_sgf){
     }
 
     
-    for (const std::string &pos: RawPositionsBlack){
-        auto conv_pos = parse_sgf_point(pos);
+    for (const std::string &pos_p: RawPositionsBlack){
+        auto conv_pos = parse_sgf_point(pos_p);
         if (!conv_pos.has_value()) return false;
         AddedPositionsBlack.push_back(*conv_pos);
     }
 
-    for (const std::string &pos: RawPositionsWhite){
-        auto conv_pos = parse_sgf_point(pos);
+    for (const std::string &pos_p: RawPositionsWhite){
+        auto conv_pos = parse_sgf_point(pos_p);
         if (!conv_pos.has_value()) return false;
         AddedPositionsWhite.push_back(*conv_pos);
     }
@@ -321,25 +356,19 @@ bool GameLog::parse(const std::string &raw_sgf){
 } 
 
 
-bool GameLog::load_board_data(Board &board, HistoryTracker &history){
-    board = Board(BoardSize, komi);
-    history = HistoryTracker(HandicapBlack, starting_player);
+bool GameLog::load_board_data(Board &board_org, HistoryTracker &history_org){
+    Board board = Board(BoardSize, komi);
+    HistoryTracker history = HistoryTracker(HandicapBlack, starting_player);
 
-    if (HandicapBlack >= 2 && AddedPositionsWhite.empty()){
-        for (const Point &p: AddedPositionsBlack){
-            MoveStatus tmp = history.play_move(board, board.get(p), Color::Black);
-            if (tmp != MoveStatus::Success) return false;
-        }
-    }else{
-        for (const Point &p: AddedPositionsBlack){
-            MoveState tmp = board.place(p, Color::Black);
-            if (tmp.status != MoveStatus::Success) return false;
-        }
-        for (const Point &p: AddedPositionsWhite){
-            MoveState tmp = board.place(p, Color::White);
-            if (tmp.status != MoveStatus::Success) return false;
-        }
+    for (const Point &p: AddedPositionsBlack){
+        MoveStatus tmp = history.place_setup(board, p, Color::Black);
+        if (tmp != MoveStatus::Success) return false;
     }
+    for (const Point &p: AddedPositionsWhite){
+        MoveStatus tmp = history.place_setup(board, p, Color::White);
+        if (tmp != MoveStatus::Success) return false;
+    }
+
     
     for (const Move &m: moves_list){
         if (m.color != history.get_turn()) return false;
@@ -359,6 +388,8 @@ bool GameLog::load_board_data(Board &board, HistoryTracker &history){
         }
     }
 
+    board_org = std::move(board);
+    history_org = std::move(history) ;
     return true;
 }
 

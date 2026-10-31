@@ -386,6 +386,7 @@ bool Board::is_suicide(int16_t id, Color color, std::vector<int16_t> &opponent){
 
 // AI-assisted: see AI03
 Board::Board(int sz, double km){
+    if (sz < 2 || sz > MAX_BOARD_WIDTH) throw std::invalid_argument("Board size must be between 2 and MAX_BOARD_WIDTH");
     board_size = sz; 
     komi = km;
     liberty_tracker = DSU(sz);  
@@ -446,7 +447,6 @@ MoveState Board::place(int16_t curr_id, Color color) {
     }
 
     State my_state = ColortoState(color);
-    State opp_state = ColortoState(invertColor(color));
     Color opp_color = invertColor(color);
 
     std::vector<int16_t> friendly, opponent, empty;
@@ -501,11 +501,6 @@ MoveState Board::place(int16_t curr_id, Color color) {
     // AI-assisted: see AI03
     for (int16_t dead_id : captured) {
         board[dead_id] = State::Empty;
-
-        // idk why i commented this line out but i'll figure it out.
-
-        //liberty_tracker.reset(dead_id);
-
         int r = dead_id / board_size, c = dead_id % board_size;
         for (int i = 0; i < 4; ++i) {
             int nr = r + dr[i], nc = c + dc[i];
@@ -639,8 +634,9 @@ EndgameStatus HistoryTracker::is_game_over() const {
 }
 
 Color HistoryTracker::get_turn() const {
-    if (static_cast<int>(undo_stack.size()) < handicap_cnt) return Color::Black;
-    if (static_cast<int>(undo_stack.size()) == handicap_cnt) return current_turn;
+    int total_handicap = static_cast<int>(AddedBlack.size() + undo_stack.size());
+    if (total_handicap < handicap_cnt) return Color::Black;
+    if (undo_stack.empty() || total_handicap == handicap_cnt) return current_turn;
     return invertColor(undo_stack.back().color);
 }
 
@@ -655,6 +651,19 @@ MoveStatus HistoryTracker::play_move(Board &board, int16_t id, Color color){
     undo_stack.push_back(std::move(*res.undo_state));
 
     redo_stack.clear();
+    return MoveStatus::Success;
+}
+
+MoveStatus HistoryTracker::place_setup(Board &board, int16_t id, Color color){
+    if (is_game_over() != EndgameStatus::NotOver) return MoveStatus::GameEnded;
+    if (has_started()) return MoveStatus::InvalidCommand;
+    MoveState res = board.place(id, color);
+
+    if (res.status != MoveStatus::Success) return res.status;
+
+    if (color == Color::Black) AddedBlack.push_back(toPoint(id, board.get_size()));
+    else AddedWhite.push_back(toPoint(id, board.get_size()));
+
     return MoveStatus::Success;
 }
 
@@ -705,7 +714,11 @@ bool HistoryTracker::resign(Color color){
     return true;
 }
 
-std::optional<Color> HistoryTracker::get_resigned_player(){
+std::optional<Color> HistoryTracker::get_resigned_player() const{
     if (is_game_over() != EndgameStatus::Resignation) return std::nullopt;
     return undo_stack.back().color;
+}
+
+const std::vector<UndoState>& HistoryTracker::get_history() const{
+    return undo_stack;
 }

@@ -183,7 +183,7 @@ public:
 
 enum class MoveType : int8_t{Place, Pass, Resign, Setup, DEFAULT};
 
-enum class MoveStatus : int8_t{Success, Suicide, Ko, Occupied, OutOfBounds, GameEnded};
+enum class MoveStatus : int8_t{Success, Suicide, Ko, Occupied, OutOfBounds, GameEnded, InvalidCommand};
 inline std::string MStatus_to_str(MoveStatus status){
     switch (status){
         case MoveStatus::Success: return "Success";
@@ -192,6 +192,7 @@ inline std::string MStatus_to_str(MoveStatus status){
         case MoveStatus::Occupied: return "Cell already occupied";
         case MoveStatus::GameEnded: return "Game already ended";
         case MoveStatus::OutOfBounds: return "Out of bounds";
+        case MoveStatus::InvalidCommand: return "Invalid command";
         default: return "Unknown error";
     }
 }
@@ -202,7 +203,7 @@ enum class EndgameStatus : int8_t{Pass, Resignation, NotOver};
 struct UndoState{
     // Storing past moves for undos.
     MoveType type = MoveType::DEFAULT;
-    Color color;
+    Color color = Color::Black;
     int16_t id{-1};
     std::vector<int16_t> captured;
     DSU::Checkpoint dsu_cp;
@@ -317,6 +318,9 @@ private:
     int handicap_cnt{};
     Color current_turn = Color::Black;
 
+    std::vector<Point> AddedBlack;
+    std::vector<Point> AddedWhite;
+
     std::vector<UndoState> undo_stack;
     std::vector<RedoState> redo_stack;
 public:
@@ -324,12 +328,16 @@ public:
 
     // AI-assisted: see AI26
     EndgameStatus is_game_over() const;
-
+    bool has_started() const {return !undo_stack.empty();}
     Color get_turn() const;
 
     // AI-assisted: see AI05
     MoveStatus play_move(Board &board, int16_t id, Color color);
 
+    MoveStatus play_move(Board &board, Point p, Color color){return play_move(board, board.get(p), color);}
+    MoveStatus place_setup(Board &board, int16_t id, Color color);
+
+    MoveStatus place_setup(Board &board, Point p, Color color){return place_setup(board, board.get(p), color);}
     // AI-assisted: see AI05, AI23
     bool undo_move(Board &board);
 
@@ -341,6 +349,13 @@ public:
 
     bool resign(Color color);
 
-    std::optional<Color> get_resigned_player();
+    std::optional<Color> get_resigned_player() const;
+
+    const std::vector<UndoState>& get_history() const;
+
+    const std::vector<Point>& get_added_black() const {return AddedBlack;}
+    const std::vector<Point>& get_added_white() const {return AddedWhite;}
+    Color get_start_turn() const {return current_turn;}
+    int get_handicap_cnt() const {return handicap_cnt;}
 };
 

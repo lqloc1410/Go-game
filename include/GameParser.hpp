@@ -31,6 +31,8 @@ struct GameResult{
     ResultType reason = ResultType::Unknown;
     std::optional<Color> winner = std::nullopt; 
     double score = 0;
+
+    std::string to_sgf_string() const;
 };
 
 struct Move{
@@ -81,6 +83,12 @@ std::optional<int> to_int(std::string s);
 
 std::optional<double> to_double(std::string s);
 
+// AI-generated
+std::string point_to_sgf(Point p);
+
+// AI-generated
+std::string escape_sgf_text(const std::string& in);
+
 class GameLog{
 private: 
     int FileFormat = 4; // FF[4] for now
@@ -121,6 +129,26 @@ public:
     
 
     bool load_board_data(Board &board, HistoryTracker &history);
+
+    // Getters for SGF export
+    int get_file_format() const { return FileFormat; }
+    int get_game_mode() const { return GameMode; }
+    Ruleset get_ruleset() const { return ruleset; }
+    std::string get_ruleset_str() const { return ruleset_to_string(ruleset); }
+    int get_board_size() const { return BoardSize; }
+    const std::string& get_player_black() const { return PlayerBlack; }
+    const std::string& get_player_white() const { return PlayerWhite; }
+    double get_komi() const { return komi; }
+    const GameResult& get_result() const { return result; }
+    std::string get_result_str() const { return result.to_sgf_string(); }
+    int get_handicap() const { return HandicapBlack; }
+    const std::vector<std::string>& get_raw_black() const { return RawPositionsBlack; }
+    const std::vector<std::string>& get_raw_white() const { return RawPositionsWhite; }
+    bool has_explicit_pl() const { return set_with_PL; }
+    Color get_starting_player() const { return starting_player; }
+    const std::vector<Move>& get_moves() const { return moves_list; }
+    size_t get_move_count() const { return moves_list.size(); }
+    bool has_moves() const { return !moves_list.empty(); }
     
     // AI-generated
     friend std::ostream& operator<<(std::ostream& os, const GameLog &log);

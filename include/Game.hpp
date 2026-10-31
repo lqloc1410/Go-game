@@ -12,10 +12,10 @@ private:
     Board board;
     HistoryTracker history;
     GameLog log;
-    const fs::path save_folder = "./data";
-    const std::string save_file = "save.sgf", tmp_file = "save_tmp.sgf";
-    const std::string full_path = save_folder.string() + '/' + save_file;
-    const std::string tmp_path = save_folder.string() + '/' + tmp_file;
+    fs::path save_folder = "./data";
+    std::string save_file = "save.sgf", tmp_file = "save_tmp.sgf";
+    std::string full_path = save_folder.string() + '/' + save_file;
+    std::string tmp_path = save_folder.string() + '/' + tmp_file;
 
     std::string to_sgf() const;
 public:
