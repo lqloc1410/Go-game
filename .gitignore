@@ -3,9 +3,14 @@
 
 # Ignore local notes file
 notes.txt
+*.pdf
 
 # Ignore build directories
 build/
 release/
 debug/
-
+.obsidian/
+.vscode/
+data/
+demo/
+tests/
