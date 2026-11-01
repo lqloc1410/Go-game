@@ -13,4 +13,6 @@ debug/
 .vscode/
 data/
 demo/
+tests/unfinished_logic/
 tests/
+old/

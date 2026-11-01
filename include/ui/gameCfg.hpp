@@ -7,4 +7,6 @@ struct gameCfg {
     gameMode mode = gameMode::PvP;
     difficulty difficulty = difficulty::Easy;
     int     boardSize = 9;
+    int handicap = 0;
+    float komi = 7.5;
 };

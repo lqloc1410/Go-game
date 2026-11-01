@@ -49,6 +49,6 @@ void hudView::draw(sf::RenderWindow& w, float panelX, int currentPlayer,
     float y = 220.f;
     for (auto& t : toasts_) { text(fonts_.body, t.text, x, y, 17, sf::Color(255, 230, 150)); y += 32.f; }
 
-    text(fonts_.body, "Shortcuts: P = Pass, U = Undo", x, 700.f, 15, sf::Color(150, 150, 150));
-    text(fonts_.body, "R = Redo, N = New Game",        x, 725.f, 15, sf::Color(150, 150, 150));
+    text(fonts_.body, "Shortcuts: P = Pass, LArrow = Undo, RArrow = Redo", x, 700.f, 15, sf::Color(150, 150, 150));
+    text(fonts_.body, "N = Reset board, R = Resign, S = Save Game", x, 725.f, 15, sf::Color(150, 150, 150));
 }
