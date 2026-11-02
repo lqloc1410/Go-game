@@ -15,7 +15,7 @@ int main() {
             if (e.type == sf::Event::MouseMoved)
                 stone.setPosition((float)e.mouseMove.x, (float)e.mouseMove.y);
         }
-        window.clear(sf::Color(222, 184, 135));   
+        window.clear(sf::Color(30, 57, 75));   
         window.draw(stone);
         window.display();
     }

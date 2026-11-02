@@ -4,8 +4,11 @@
 #include <string>
 
 struct Fonts {
-    sf::Font  title;
-    sf::Font body;  
-
+    sf::Font game_title;
+    sf::Font  title_bold;
+    sf::Font title_regular;
+    sf::Font body_decor;
+    sf::Font body;
+    
     bool load(const std::string& dir = "assets/fonts/");
 };

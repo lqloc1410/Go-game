@@ -160,7 +160,7 @@ int main() {
                 break;
 
             case screen::Placeholder:
-                textCentered(window, placeholderTitle, fonts.title, 48, {575.f, 250.f}, sf::Color(240, 220, 170));
+                textCentered(window, placeholderTitle, fonts.title_bold, 56, {575.f, 250.f}, sf::Color(240, 220, 170));
                 textCentered(window, "Coming soon", fonts.body, 26, {575.f, 340.f}, sf::Color(200, 200, 200));
                 textCentered(window, "(Press Esc to go back)", fonts.body, 26, {575.f, 380.f}, sf::Color(150, 150, 155));
                 break;

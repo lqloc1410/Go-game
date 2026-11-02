@@ -117,7 +117,8 @@ void menuView::update(sf::Vector2f mouse, bool canResume) {
 }
 
 void menuView::draw(sf::RenderWindow& w) {
-    textCentered(w, "GO GAME", fonts.title, 68, {575.f, 200.f}, sf::Color(240, 220, 170));
+    textCentered(w, "GO", fonts.game_title, 130, {575.f, 200.f}, sf::Color(135, 114, 89));
+    textCentered(w, "Master your Go board", fonts.body_decor, 48, {575.f, 300.f}, sf::Color(108, 94, 79));
     
     const char* header = nullptr;
     if (page == page::Mode) header = "Select game mode";
