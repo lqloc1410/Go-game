@@ -44,9 +44,12 @@ void BoardView::draw(sf::RenderWindow& w,
                      const std::function<int(int, int)>& stoneAt,
                      int currentPlayer) const {
     // 1) nền gỗ
+    sf::Texture wood;
+    wood.loadFromFile("assets/image/wooden.jpg");
     sf::RectangleShape bg({size_, size_});
     bg.setPosition(origin_);
-    bg.setFillColor(sf::Color(222, 184, 135));
+    bg. setTexture(&wood);
+    bg.setFillColor(sf::Color(225, 225, 225, 200));
     w.draw(bg);
 
     // 2) các đường kẻ

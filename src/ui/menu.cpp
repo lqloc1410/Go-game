@@ -117,15 +117,15 @@ void menuView::update(sf::Vector2f mouse, bool canResume) {
 }
 
 void menuView::draw(sf::RenderWindow& w) {
-    textCentered(w, "GO", fonts.game_title, 130, {575.f, 200.f}, sf::Color(135, 114, 89));
-    textCentered(w, "Master your Go board", fonts.body_decor, 48, {575.f, 300.f}, sf::Color(108, 94, 79));
+    textCentered(w, "GO", fonts.game_title, 130, {575.f, 150.f}, sf::Color(44, 38, 30));
+    textCentered(w, "Master your Go board", fonts.body_decor, 48, {575.f, 250.f}, sf::Color(55, 36, 20));
     
     const char* header = nullptr;
     if (page == page::Mode) header = "Select game mode";
     else if (page == page::Difficulty) header = "Select difficulty";
     else if (page == page::boardSize) header = "Select board size";
     
-    if (header) textCentered(w, header, fonts.body, 26, {575.f, 320.f}, sf::Color(200, 200, 200));
+    if (header) textCentered(w, header, fonts.body, 26, {575.f, 320.f}, sf::Color(57, 24, 9));
     
     for (auto& b : active()) b.draw(w);
 

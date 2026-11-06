@@ -45,6 +45,8 @@ set (SOURCES
     src/ui/audio.cpp
     src/ui/button.cpp
     src/ui/menu.cpp
+    src/Game.cpp
+    src/GameParser.cpp
 )
 
 add_library(GoCore STATIC ${SOURCES})

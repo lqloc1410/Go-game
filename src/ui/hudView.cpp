@@ -27,7 +27,7 @@ void hudView::draw(sf::RenderWindow& w, float panelX, int currentPlayer,
 
     sf::RectangleShape panel({kVirtualW - panelX, kVirtualH});
     panel.setPosition(panelX, 0.f);
-    panel.setFillColor(sf::Color(30, 57, 75));
+    panel.setFillColor(sf::Color(44, 38, 30));
     w.draw(panel);
 
     float x = panelX + 24.f;
@@ -49,6 +49,11 @@ void hudView::draw(sf::RenderWindow& w, float panelX, int currentPlayer,
     float y = 220.f;
     for (auto& t : toasts_) { text(fonts_.body, t.text, x, y, 17, sf::Color(255, 230, 150)); y += 32.f; }
 
-    text(fonts_.body, "Shortcuts: P = Pass, U = Undo", x, 700.f, 15, sf::Color(215, 207, 191));
-    text(fonts_.body, "R = Redo, N = New Game",        x, 725.f, 15, sf::Color(215, 207, 191));
+    text(fonts_.body, "Shortcuts: ", x, 575.f, 15, sf::Color(215, 207, 191));
+    text(fonts_.body, "P = Pass", x,600.f, 15, sf::Color(215, 207, 191));
+    text(fonts_.body, "LArrow = Undo",x,625.f, 15, sf::Color(215, 207, 191));
+    text(fonts_.body, "RArrow = Redo", x, 650.f, 15, sf::Color(215, 207, 191));
+    text(fonts_.body, "N = Reset board", x, 675.f, 15, sf::Color(215, 207, 191));
+    text(fonts_.body, "R = Resign", x,700.f, 15, sf::Color(215, 207, 191));
+    text(fonts_.body, "S = Save Game", x, 725.f, 15, sf::Color(215, 207, 191));
 }

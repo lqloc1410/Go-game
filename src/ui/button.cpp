@@ -21,19 +21,19 @@ void button::setLabel(const std::string& s) {
 
 void button::draw(sf::RenderWindow& w) {
     if (!enabled) {
-        box.setFillColor(sf::Color(45, 45, 50));
-        box.setOutlineColor(sf::Color(70, 70, 75));
-        text.setFillColor(sf::Color(110, 110, 115));
+        box.setFillColor(sf::Color(68, 58, 53));
+        box.setOutlineColor(sf::Color(37, 37, 37));
+        text.setFillColor(sf::Color(228, 221, 204));
     }
     else if (hover) {
-        box.setFillColor(sf::Color(95, 95, 120));
-        box.setOutlineColor(sf::Color(225, 210, 100));
-        text.setFillColor(sf::Color(0, 0, 0));
+        box.setFillColor(sf::Color(239, 201, 148));
+        box.setOutlineColor(sf::Color(82, 59, 46));
+        text.setFillColor(sf::Color(82, 59, 46));
     }
     else {
-        box.setFillColor(sf::Color(60, 60, 72));
-        box.setOutlineColor(sf::Color(130, 130, 145));
-        text.setFillColor(sf::Color(235, 235, 235));
+        box.setFillColor(sf::Color(90, 61, 41, 200));
+        box.setOutlineColor(sf::Color(121, 84, 52));
+        text.setFillColor(sf::Color(241, 218, 191));
     }
     w.draw(box);
     w.draw(text);
