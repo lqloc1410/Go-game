@@ -14,10 +14,9 @@ menuView::menuView(const Fonts& fonts, gameCfg& cfg) : fonts(fonts), cfg(cfg) {
     const sf::Font& f = fonts.body;
 
     main.emplace_back("New Game", slot(0), coeffButton, f);
-    main.emplace_back("Saved Game", slot(1), coeffButton, f);
-    main.emplace_back("On-going Game", slot(2), coeffButton, f);
-    main.emplace_back("Game mode", slot(3), coeffButton, f);
-    main.emplace_back("Settings", slot(4), coeffButton, f);
+    main.emplace_back("Resume Game", slot(1), coeffButton, f);
+    main.emplace_back("Saved Game", slot(2), coeffButton, f);
+    main.emplace_back("Settings", slot(3), coeffButton, f);
     
     mode.emplace_back("Player vs Player", slot(0), coeffButton, f);
     mode.emplace_back("Player vs AI", slot(1), coeffButton, f);
@@ -54,21 +53,10 @@ std::string menuView::modeText() const {
 void menuView::onClick(int i) {
     switch (page) {
         case page::Main:
-            if (i == 0) page = page::boardSize;
-            else if (i == 1) action = menuAction::openSaved;
-            else if (i == 2) action = menuAction::resume;
-            else if (i == 3) page = page::Mode;
-            else if (i == 4) action = menuAction::settings;
-            break;
-
-        case page::boardSize:
-            if (i == 3) backtoMain();
-            else {
-                const int sizes[] = {9, 13, 19};
-                cfg.boardSize = sizes[i];
-                action = menuAction::newGame;
-                backtoMain();
-            }
+            if (i == 0) page = page::Mode;
+            else if (i == 2) action = menuAction::openSaved;
+            else if (i == 1) action = menuAction::resume;
+            else if (i == 3) action = menuAction::settings;
             break;
 
         case page::Mode:
@@ -82,6 +70,16 @@ void menuView::onClick(int i) {
                 page = page::Difficulty;
             }
             else backtoMain();
+            break;
+
+        case page::boardSize:
+            if (i == 3) backtoMain();
+            else {
+                const int sizes[] = {9, 13, 19};
+                cfg.boardSize = sizes[i];
+                action = menuAction::newGame;
+                backtoMain();
+            }
             break;
 
         case page::Difficulty:
