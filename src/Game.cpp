@@ -92,6 +92,11 @@ MoveStatus Game::play_move(int16_t id) {
     return history.play_move(board, id, history.get_turn());
 }
 
+MoveStatus Game::play_move(int16_t id, Color color) {
+    if (is_game_over() != EndgameStatus::NotOver) return MoveStatus::GameEnded;
+    return history.play_move(board, id, color);
+}
+
 bool Game::save() const {
     try {
         std::error_code ec;

@@ -12,7 +12,8 @@
 #include <utility>
 #include <queue>
 #include <string>
-
+#include <random>
+#include <chrono>
 // Because Go can have a 19x19 board, we set max size here.
 const int MAX_BOARD_WIDTH = 19;
 const int CELL_CNT = MAX_BOARD_WIDTH * MAX_BOARD_WIDTH;
@@ -20,6 +21,8 @@ const int CELL_CNT = MAX_BOARD_WIDTH * MAX_BOARD_WIDTH;
 // For easy grid traversals;
 const int dr[] = {1, -1, 0, 0};
 const int dc[] = {0, 0, 1, -1};
+const int drd[] = {1, 1, -1, -1};
+const int dcd[] = {-1, 1, -1, 1};
 
 /*
     Defines enums for board states and player colors. 
@@ -230,6 +233,19 @@ struct RedoState{
     RedoState(int16_t inp_id, Color inp_color, MoveType inp_type);
 };
 
+// Fixed-capacity 4-element stack buffer to avoid heap allocations for orthogonal neighbors
+struct SmallVec4 {
+    int16_t data[4]{};
+    int sz = 0;
+
+    void clear() { sz = 0; }
+    void push_back(int16_t val) { data[sz++] = val; }
+    int16_t* begin() { return data; }
+    int16_t* end() { return data + sz; }
+    const int16_t* begin() const { return data; }
+    const int16_t* end() const { return data + sz; }
+};
+
 class Board{
 private:
     int board_size{};
@@ -248,7 +264,11 @@ private:
 
     // Structures to implement Zorbist Hashing.
     Hash curr_hash;
-    std::set<Hash> seen_hashes;
+    std::vector<Hash> seen_hashes;
+
+    bool has_seen_hash(const Hash &h) const {
+        return std::find(seen_hashes.rbegin(), seen_hashes.rend(), h) != seen_hashes.rend();
+    }
 
     // DSU for liberty tracking
     DSU liberty_tracker;
@@ -264,14 +284,20 @@ private:
     // AI-assisted: see AI04, AI13, AI16, AI18
     // Helper function to check if a move is suicide. 
     // This function also collects data of empty, friendly and opponent cells 
-    bool is_suicide(int16_t id, Color color, std::vector<int16_t> &empty, std::vector<int16_t> &friendly, std::vector<int16_t> &opponent);
+    bool is_suicide(int16_t id, Color color, SmallVec4 &empty, SmallVec4 &friendly, SmallVec4 &opponent);
     // AI-assisted: see AI18, AI19, AI21
     // Helper to check if a placement is suicide.
     // Also collects opponent roots to check hash.
-    bool is_suicide(int16_t id, Color color, std::vector<int16_t> &opponent);
+    bool is_suicide(int16_t id, Color color, SmallVec4 &opponent);
 
     // Helper to get cell id from r, c
     int16_t get(int r, int c) const;
+
+    //std::random_device rd;
+
+    static thread_local std::mt19937 gen;
+
+    std::uniform_int_distribution<int> get_rand;
 public:
     // AI-assisted: see AI03
     Board(int sz = 19, double km = 7.5);
@@ -285,6 +311,11 @@ public:
     // AI-assisted: see AI17
     std::vector<int16_t> get_legal_moves(Color color);
 
+    bool is_eye(int16_t id, Color color);
+
+    int16_t getRandPoint(Color color);
+
+    std::vector<int16_t> getReasonablePtsShuffled(Color color);
     // AI-assisted: see AI02, AI03, AI04, AI05, AI08, AI19
     MoveState place(int16_t curr_id, Color color);
 
@@ -301,6 +332,8 @@ public:
 
     double get_komi() const;
 
+    void set_komi(double km) { komi = km; }
+
     int16_t to_id(int r, int c) const;
 
     State get_cell(int r, int c) const;
@@ -310,6 +343,8 @@ public:
 
     // AI-assisted: see AI08
     double calculate_score() const;
+
+    int get_cell_cnt(){return cell_cnt;}
 };
 
 // AI-assisted: see AI05

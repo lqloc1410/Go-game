@@ -26,6 +26,7 @@ public:
     bool load_from_file(){return load_from_file(full_path);}
 
     MoveStatus play_move(int16_t id);
+    MoveStatus play_move(int16_t id, Color color);
     MoveStatus play_move(int r, int c){return play_move(board.to_id(r, c));}
     MoveStatus play_move(Point p){return play_move(board.get(p));}
 
@@ -33,11 +34,14 @@ public:
     bool undo() {return history.undo_move(board);}
     bool redo() {return history.redo_move(board);}
     bool pass() {return history.pass(history.get_turn());}
+    bool pass(Color color) {return history.pass(color);}
     bool resign() {return history.resign(history.get_turn());}
+    bool resign(Color color) {return history.resign(color);}
     std::optional<Color> get_resigned_player() const { return history.get_resigned_player(); }
     EndgameStatus is_game_over() const {return history.is_game_over();}
     int get_size() const { return board.get_size(); }
     double get_komi() const { return board.get_komi(); }
+    void set_komi(double km) { board.set_komi(km); }
     int get_black_cnt() const { return board.get_black_cnt(); }
     int get_white_cnt() const { return board.get_white_cnt(); }
     double calculate_score() const { return board.calculate_score(); }

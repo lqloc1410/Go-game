@@ -1,5 +1,5 @@
 #include "GameLogic.hpp"
-
+thread_local std::mt19937 Board::gen{std::random_device{}()};
 // Definitions for Color-State conversion.
 std::optional<Color> StatetoColor(State state){
     if (state == State::Black){
@@ -295,7 +295,7 @@ int Board::score_cnt_helper(int16_t id) const{
 }
 
 // AI-assisted: see AI04, AI13, AI16, AI18
-bool Board::is_suicide(int16_t id, Color color, std::vector<int16_t> &empty, std::vector<int16_t> &friendly, std::vector<int16_t> &opponent){       
+bool Board::is_suicide(int16_t id, Color color, SmallVec4 &empty, SmallVec4 &friendly, SmallVec4 &opponent){       
     empty.clear();
     friendly.clear();
     opponent.clear();
@@ -343,7 +343,7 @@ bool Board::is_suicide(int16_t id, Color color, std::vector<int16_t> &empty, std
 }
 
 // AI-assisted: see AI18, AI19, AI21
-bool Board::is_suicide(int16_t id, Color color, std::vector<int16_t> &opponent){       
+bool Board::is_suicide(int16_t id, Color color, SmallVec4 &opponent){       
     opponent.clear();
     
     int r = id / board_size, c = id % board_size;
@@ -390,8 +390,10 @@ Board::Board(int sz, double km){
     board_size = sz; 
     komi = km;
     liberty_tracker = DSU(sz);  
-    seen_hashes.insert(curr_hash);
     cell_cnt = board_size*board_size;
+    seen_hashes.reserve(3 * cell_cnt);
+    seen_hashes.push_back(curr_hash);
+    get_rand = std::uniform_int_distribution(0, sz * sz - 1);
     st.reserve(cell_cnt);
 }
 
@@ -403,8 +405,7 @@ bool Board::is_legal(int16_t curr_id, Color color)  {
 
     Color opp_color = invertColor(color);
 
-    std::vector<int16_t> opponent;
-    opponent.reserve(4);
+    SmallVec4 opponent;
 
     if (is_suicide(curr_id, color, opponent)) return false;
     
@@ -418,7 +419,7 @@ bool Board::is_legal(int16_t curr_id, Color color)  {
         }
     }
 
-    if (seen_hashes.contains(tmp_hash)) return false;
+    if (has_seen_hash(tmp_hash)) return false;
 
     return true;
 }
@@ -436,6 +437,95 @@ std::vector<int16_t> Board::get_legal_moves(Color color) {
     return ans;
 }
 
+bool Board::is_eye(int16_t id, Color color) {
+    if (id < 0 || id >= cell_cnt || board[id] != State::Empty) return false;
+    int r = id / board_size, c = id % board_size;
+
+    State my_state = ColortoState(color);
+    State opp_state = ColortoState(invertColor(color));
+
+    for (int i = 0; i < 4; ++i) {
+        int nr = r + dr[i], nc = c + dc[i];
+        if (nr < 0 || nr >= board_size || nc < 0 || nc >= board_size) continue;
+        if (board[nr * board_size + nc] != my_state) return false;
+    }
+
+    int valid = 0, opp = 0;
+    for (int i = 0; i < 4; ++i) {
+        int nr = r + drd[i], nc = c + dcd[i];
+        if (nr < 0 || nr >= board_size || nc < 0 || nc >= board_size) continue;
+        valid += 1;
+        if (board[nr * board_size + nc] == opp_state) opp += 1;
+    }
+
+    return !((valid == 4 && opp > 1) || (valid < 4 && opp > 0));
+}
+
+int16_t Board::getRandPoint(Color color) {
+    int16_t empty_buf[CELL_CNT];
+    int remaining = 0;
+    for (int16_t i = 0; i < cell_cnt; ++i) {
+        if (board[i] == State::Empty) {
+            empty_buf[remaining++] = i; // <-- Only checks State::Empty! (No is_legal, no heap alloc)
+        }
+    }
+
+    while (remaining > 0) {
+        int idx = static_cast<int>((static_cast<uint64_t>(gen()) * remaining) >> 32);
+        int16_t nid = empty_buf[idx];
+        if (!is_eye(nid, color) && is_legal(nid, color)) { // <-- Only called ONCE (on the 1 picked cell)!
+            return nid;
+        }
+        empty_buf[idx] = empty_buf[--remaining];
+    }
+
+    return -1;
+}
+
+std::vector<int16_t> Board::getReasonablePtsShuffled(Color color) {
+    std::vector<int16_t> ans;
+    ans.reserve(cell_cnt);
+
+    bool has_stones = (black_cnt + white_cnt) > 0;
+
+    for (int16_t i = 0; i < cell_cnt; ++i) {
+        if (board[i] != State::Empty) continue;
+
+        if (has_stones) {
+            int r = i / board_size, c = i % board_size;
+            bool near_stone = false;
+            for (int dr_i = -2; dr_i <= 2 && !near_stone; ++dr_i) {
+                for (int dc_i = -2; dc_i <= 2; ++dc_i) {
+                    int nr = r + dr_i, nc = c + dc_i;
+                    if (nr >= 0 && nr < board_size && nc >= 0 && nc < board_size) {
+                        if (board[nr * board_size + nc] != State::Empty) {
+                            near_stone = true;
+                            break;
+                        }
+                    }
+                }
+            }
+            if (!near_stone) continue;
+        }
+
+        if (!is_eye(i, color) && is_legal(i, color)) {
+            ans.push_back(i);
+        }
+    }
+
+    // Fallback if all local moves are full/illegal
+    if (ans.empty()) {
+        for (int16_t i = 0; i < cell_cnt; ++i) {
+            if (board[i] == State::Empty && !is_eye(i, color) && is_legal(i, color)) {
+                ans.push_back(i);
+            }
+        }
+    }
+
+    std::shuffle(ans.begin(), ans.end(), gen);
+    return ans;
+}
+
 // AI-assisted: see AI02, AI03, AI04, AI05, AI08, AI19
 MoveState Board::place(int16_t curr_id, Color color) {
     if (curr_id < 0 || curr_id >= cell_cnt) {
@@ -449,10 +539,7 @@ MoveState Board::place(int16_t curr_id, Color color) {
     State my_state = ColortoState(color);
     Color opp_color = invertColor(color);
 
-    std::vector<int16_t> friendly, opponent, empty;
-    friendly.reserve(4);
-    opponent.reserve(4);
-    empty.reserve(4);
+    SmallVec4 friendly, opponent, empty;
 
     if (is_suicide(curr_id, color, empty, friendly, opponent)) return {MoveStatus::Suicide};
     
@@ -470,7 +557,7 @@ MoveState Board::place(int16_t curr_id, Color color) {
         }
     }
 
-    if (seen_hashes.contains(tmp_hash)) return MoveState{MoveStatus::Ko};
+    if (has_seen_hash(tmp_hash)) return MoveState{MoveStatus::Ko};
 
     MoveState res;
     res.undo_state.emplace();
@@ -484,7 +571,7 @@ MoveState Board::place(int16_t curr_id, Color color) {
     liberty_tracker.reset(curr_id);
     board[curr_id] = my_state;
     curr_hash = tmp_hash;
-    seen_hashes.insert(curr_hash);
+    seen_hashes.push_back(curr_hash);
 
     for (int e : empty) {
         liberty_tracker.add_liberty(curr_id, e);
@@ -541,7 +628,7 @@ void Board::undo(const UndoState &state){
     }
     // AI-assisted: see AI20
     liberty_tracker.rollback(state.dsu_cp);
-    seen_hashes.erase(curr_hash);
+    seen_hashes.pop_back();
     curr_hash = state.prev_hash;
 
     // AI-assisted: see AI08
