@@ -37,9 +37,14 @@ MCTSNode* MCTSInstance::selectChild(){
     Color next_player = invertColor(curr -> prev_player);
     if (!curr->moves_generated) {
         curr->untried_moves = board.getReasonablePtsShuffled(next_player);
-        if (curr->untried_moves.empty()) {
-            curr->untried_moves.push_back(-1);
+        curr->untried_moves.push_back(-1); // Always O(1)
+
+        // If the opponent DID NOT pass, we want Pass (-1) evaluated last.
+        // Move it to index 0 so it's popped last (.pop_back()):
+        if (curr->type != MoveType::Pass && curr->untried_moves.size() > 1) {
+            std::swap(curr->untried_moves.front(), curr->untried_moves.back()); // O(1)
         }
+        // If curr->type == MoveType::Pass, -1 stays at .back() and gets popped FIRST!
         curr->moves_generated = true;
     }
 
@@ -139,10 +144,12 @@ int16_t MCTSInstance::get_best_move(int time_limit_ms){
     return best_child ? best_child->id : -1;
 }
 
-MCTSThreads::MCTSThreads(const Board &board, Color color, MoveType type){
-    thread_cnt = std::max(1u, std::thread::hardware_concurrency());
+MCTSThreads::MCTSThreads(const Board &board, Color color, MoveType type, unsigned int requested_cnt){
+    unsigned int hw = std::max(1u, std::thread::hardware_concurrency());
+    unsigned int default_cnt = hw > 1 ? hw - 1 : 1;
+    thread_cnt = requested_cnt ? std::min(requested_cnt, hw) : default_cnt;    
     instances.reserve(thread_cnt);
-    for (int i = 0; i < thread_cnt; ++i){
+    for (unsigned int i = 0; i < thread_cnt; ++i){
         instances.emplace_back(board, color, type);
     }
     threads.reserve(thread_cnt);
@@ -150,7 +157,7 @@ MCTSThreads::MCTSThreads(const Board &board, Color color, MoveType type){
 
 int16_t MCTSThreads::get_best_move(int time_limit_ms){
     threads.clear();
-    for (int i = 0; i < thread_cnt; ++i){
+    for (unsigned int i = 0; i < thread_cnt; ++i){
         threads.emplace_back(&MCTSInstance::get_best_move, &instances[i], time_limit_ms);
     }
 

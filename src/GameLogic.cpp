@@ -484,8 +484,7 @@ int16_t Board::getRandPoint(Color color) {
 
 std::vector<int16_t> Board::getReasonablePtsShuffled(Color color) {
     std::vector<int16_t> ans;
-    ans.reserve(cell_cnt);
-
+    ans.reserve(cell_cnt + 1);
     bool has_stones = (black_cnt + white_cnt) > 0;
 
     for (int16_t i = 0; i < cell_cnt; ++i) {

@@ -66,7 +66,7 @@ private:
     std::vector<std::thread> threads;
 public:
     MCTSThreads() = delete;
-    MCTSThreads(const Board &board, Color color, MoveType type = MoveType::DEFAULT);
+    MCTSThreads(const Board &board, Color color, MoveType type = MoveType::DEFAULT, unsigned int requested_cnt = 0);
 
     int16_t get_best_move(int time_limit_ms = 1000);
 };

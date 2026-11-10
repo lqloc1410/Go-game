@@ -648,7 +648,7 @@ int main(int argc, char* argv[]) {
         }
 
         std::cout << ">> AI [" << ai_str << "] is thinking (" << limit_ms << " ms)...\n";
-        MCTSThreads mcts(game.get_board(), turn_color, prev_type);
+        MCTSThreads mcts(game.get_board(), turn_color, prev_type, 6);
         int16_t best_id = mcts.get_best_move(limit_ms);
 
         clear_screen();
