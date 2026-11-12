@@ -29,9 +29,10 @@ const int dcd[] = {-1, 1, -1, 1};
     Improves type safety and prevents malformed inputs
 */
 enum class State : int8_t{
-    Black = -1,
-    White = 1,
+    Black = 1,
+    White = 2,
     Empty = 0,
+    OutOfBounds = 3
 };
 
 enum class Color : int8_t{
@@ -159,11 +160,11 @@ public:
     DSU(int sz);
     
     // Standard DSU stuff
-    int get(int16_t u);
+    const int get(int16_t u) const;
     bool join(int16_t u, int16_t v);
 
     // Helper operations for liberties
-    int count_liberty(int16_t u);
+    const int count_liberty(int16_t u) const;
     void add_liberty(int16_t u, int16_t lib_cell);
     void remove_liberty(int16_t u, int16_t lib_cell);
 
@@ -173,7 +174,7 @@ public:
 
     // AI-assisted: see AI10
     // Function to get a connected group.
-    std::vector<int16_t> get_group(int u);
+    const std::vector<int16_t> get_group(int u) const;
 
     // AI-assisted: see AI10, AI19, AI20
     // CAUTION: Only safe to call on an isolated empty cell, 
@@ -182,6 +183,10 @@ public:
     void reset(int16_t u);
     // AI-assisted: see AI20
     void rollback(Checkpoint cp);
+
+    const int16_t get_single_liberty(int16_t u) const;
+
+    const int get_group_size(int16_t u) const {return cmp_size[get(u)];}
 };
 
 enum class MoveType : int8_t{Place, Pass, Resign, Setup, DEFAULT};
@@ -244,6 +249,13 @@ struct SmallVec4 {
     int16_t* end() { return data + sz; }
     const int16_t* begin() const { return data; }
     const int16_t* end() const { return data + sz; }
+    int find(int16_t val){
+        for (int i = 0; i < sz; ++i){
+            if (data[i] == val) return i;
+        }
+
+        return -1;
+    }
 };
 
 class Board{
@@ -290,20 +302,40 @@ private:
     // Also collects opponent roots to check hash.
     bool is_suicide(int16_t id, Color color, SmallVec4 &opponent);
 
-    // Helper to get cell id from r, c
-    int16_t get(int r, int c) const;
+    
 
     //std::random_device rd;
 
-    static thread_local std::mt19937 gen;
+    std::mt19937 gen;
 
     std::uniform_int_distribution<int> get_rand;
+
+    std::array<int16_t, CELL_CNT> empty_cells{};
+    std::array<int16_t, CELL_CNT> empty_idx{};
+    int empty_cnt = 0;
+
+    inline void remove_empty(int16_t id) {
+        int16_t idx = empty_idx[id];                 // 1. Where is curr_id located?
+        int16_t last_id = empty_cells[--empty_cnt];  // 2. Decrement count & grab the last cell
+        empty_cells[idx] = last_id;                  // 3. Move the last cell into the hole
+        empty_idx[last_id] = idx;                    // 4. Update the moved cell's index
+    }
+
+    inline void add_empty(int16_t id){
+        empty_cells[empty_cnt] = id;
+        empty_idx[id] = static_cast<int16_t>(empty_cnt);
+        empty_cnt++;
+    }
 public:
+    void seed_gen(uint64_t s) { gen.seed(s); }
     // AI-assisted: see AI03
     Board(int sz = 19, double km = 7.5);
 
     // Helper to get cell id from Point
     int16_t get(Point point) const;
+
+    // Helper to get cell id from r, c
+    int16_t get(int r, int c) const;
 
     // AI-assisted: see AI17
     bool is_legal(int16_t curr_id, Color color);
@@ -345,6 +377,16 @@ public:
     double calculate_score() const;
 
     int get_cell_cnt(){return cell_cnt;}
+
+    int16_t get_only_lib(int16_t u){ return liberty_tracker.get_single_liberty(u);}
+
+    int count_lib(int16_t u) const { return liberty_tracker.count_liberty(u); }
+
+    int get_group_size(int16_t u){return liberty_tracker.get_group_size(u);}
+
+    int16_t get_root(int id){return liberty_tracker.get(id);}
+    int16_t get_root(int r, int c) {return get_root(get(r, c));}
+    int16_t get_root(Point point) {return get_root(get(point));}
 };
 
 // AI-assisted: see AI05
@@ -393,4 +435,3 @@ public:
     Color get_start_turn() const {return current_turn;}
     int get_handicap_cnt() const {return handicap_cnt;}
 };
-

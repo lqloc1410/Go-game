@@ -144,6 +144,8 @@ public:
     int get_handicap() const { return HandicapBlack; }
     const std::vector<std::string>& get_raw_black() const { return RawPositionsBlack; }
     const std::vector<std::string>& get_raw_white() const { return RawPositionsWhite; }
+    const std::vector<Point>& get_added_positions_black() const { return AddedPositionsBlack; }
+    const std::vector<Point>& get_added_positions_white() const { return AddedPositionsWhite; }
     bool has_explicit_pl() const { return set_with_PL; }
     Color get_starting_player() const { return starting_player; }
     const std::vector<Move>& get_moves() const { return moves_list; }

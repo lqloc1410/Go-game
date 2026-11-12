@@ -7,12 +7,21 @@
 #include <iomanip>
 #include <cmath>
 #include <cstdlib>
+#ifdef _WIN32
+#include <io.h>
+#else
+#include <unistd.h>
+#endif
 
 static void clear_screen() {
 #ifdef _WIN32
-    std::system("cls");
+    if (_isatty(_fileno(stdout))) {
+        std::system("cls");
+    }
 #else
-    std::system("clear");
+    if (isatty(fileno(stdout))) {
+        std::system("clear");
+    }
 #endif
 }
 
@@ -212,6 +221,9 @@ static void run_gtp(Game& game, int default_time_ms = 1000) {
         std::cout.flush();
     };
 
+    // AI-assisted: see AI78 - persistent MCTS instance across turns for tree reuse
+    std::unique_ptr<MCTSThreads> mcts = nullptr;
+
     std::string raw_line;
     while (std::getline(std::cin, raw_line)) {
         // GTP v2 preprocessing: strip control characters except HT/LF, convert HT to space, strip comments (#)
@@ -284,9 +296,11 @@ static void run_gtp(Game& game, int default_time_ms = 1000) {
             }
             current_board_size = *maybe_sz;
             game = Game(current_board_size, current_komi, 0);
+            mcts.reset();
             reply_ok(id_str);
         } else if (cmd_name == "clear_board") {
             game = Game(current_board_size, current_komi, 0);
+            mcts.reset();
             reply_ok(id_str);
         } else if (cmd_name == "komi") {
             std::string km_tok;
@@ -301,6 +315,7 @@ static void run_gtp(Game& game, int default_time_ms = 1000) {
             }
             current_komi = *maybe_km;
             game.set_komi(current_komi);
+            mcts.reset();
             reply_ok(id_str);
         } else if (cmd_name == "fixed_handicap" || cmd_name == "place_free_handicap") {
             std::string n_tok;
@@ -323,6 +338,7 @@ static void run_gtp(Game& game, int default_time_ms = 1000) {
                 continue;
             }
             game = Game(current_board_size, current_komi, *maybe_n);
+            mcts.reset();
             std::ostringstream oss;
             for (size_t i = 0; i < pts.size(); ++i) {
                 int16_t id = game.get_board().to_id(pts[i].r, pts[i].c);
@@ -352,6 +368,7 @@ static void run_gtp(Game& game, int default_time_ms = 1000) {
                 continue;
             }
             game = Game(current_board_size, current_komi, static_cast<int>(ids.size()));
+            mcts.reset();
             bool ok = true;
             for (int16_t id : ids) {
                 if (game.place_setup(id, Color::Black) != MoveStatus::Success) {
@@ -381,12 +398,14 @@ static void run_gtp(Game& game, int default_time_ms = 1000) {
                 if (!game.pass(color)) {
                     reply_err(id_str, "illegal move");
                 } else {
+                    if (mcts) mcts->advance_tree(-1, MoveType::Pass, color);
                     reply_ok(id_str);
                 }
             } else if (vert_lower == "resign") {
                 if (!game.resign(color)) {
                     reply_err(id_str, "illegal move");
                 } else {
+                    mcts.reset();
                     reply_ok(id_str);
                 }
             } else {
@@ -399,6 +418,7 @@ static void run_gtp(Game& game, int default_time_ms = 1000) {
                 if (st != MoveStatus::Success) {
                     reply_err(id_str, "illegal move");
                 } else {
+                    if (mcts) mcts->advance_tree(id, MoveType::Place, color);
                     reply_ok(id_str);
                 }
             }
@@ -422,17 +442,26 @@ static void run_gtp(Game& game, int default_time_ms = 1000) {
             if (!hist.empty()) {
                 prev_type = hist.back().type;
             }
-            MCTSThreads mcts(game.get_board(), color, prev_type);
-            int16_t best_id = mcts.get_best_move(ai_time_ms);
+            if (!mcts) {
+                mcts = std::make_unique<MCTSThreads>(game.get_board(), color, prev_type);
+            }
+            int16_t best_id = mcts->get_best_move(ai_time_ms);
+            int rollouts = mcts->get_new_rollouts();
+            int total_visits = mcts->get_total_rollouts();
+            int rps = (ai_time_ms > 0) ? static_cast<int>(static_cast<long long>(rollouts) * 1000 / ai_time_ms) : 0;
+            std::cerr << "info: " << rollouts << " rollouts (" << rps << " rps) | tree visits: " << total_visits << "\n";
             if (best_id == -1) {
                 game.pass(color);
+                mcts->advance_tree(-1, MoveType::Pass, color);
                 reply_ok(id_str, "pass");
             } else {
                 MoveStatus st = game.play_move(best_id, color);
                 if (st == MoveStatus::Success) {
+                    mcts->advance_tree(best_id, MoveType::Place, color);
                     reply_ok(id_str, id_to_gtp_vertex(best_id, game.get_size()));
                 } else {
                     game.pass(color);
+                    mcts->advance_tree(-1, MoveType::Pass, color);
                     reply_ok(id_str, "pass");
                 }
             }
@@ -440,6 +469,7 @@ static void run_gtp(Game& game, int default_time_ms = 1000) {
             if (!game.undo()) {
                 reply_err(id_str, "cannot undo");
             } else {
+                mcts.reset();
                 reply_ok(id_str);
             }
         } else if (cmd_name == "time_settings") {
@@ -639,6 +669,9 @@ int main(int argc, char* argv[]) {
     bool bot_vs_bot = false;
     int ai_time_ms = 1000;
 
+    // AI-assisted: see AI78 - persistent MCTS instance across turns for tree reuse
+    std::unique_ptr<MCTSThreads> mcts = nullptr;
+
     auto play_ai_turn = [&](Color turn_color, int limit_ms) {
         const char* ai_str = (turn_color == Color::Black) ? "Black (X)" : "White (O)";
         MoveType prev_type = MoveType::DEFAULT;
@@ -647,24 +680,35 @@ int main(int argc, char* argv[]) {
             prev_type = hist.back().type;
         }
 
-        std::cout << ">> AI [" << ai_str << "] is thinking (" << limit_ms << " ms)...\n";
-        MCTSThreads mcts(game.get_board(), turn_color, prev_type, 6);
-        int16_t best_id = mcts.get_best_move(limit_ms);
+        std::cout << ">> AI [" << ai_str << "] is thinking (" << limit_ms << " ms)...\n" << std::flush;
+        if (!mcts) {
+            mcts = std::make_unique<MCTSThreads>(game.get_board(), turn_color, prev_type);
+        }
+        int16_t best_id = mcts->get_best_move(limit_ms);
 
         clear_screen();
+        int rollouts = mcts->get_new_rollouts();
+        int total_visits = mcts->get_total_rollouts();
+        int rps = (limit_ms > 0) ? static_cast<int>(static_cast<long long>(rollouts) * 1000 / limit_ms) : 0;
         if (best_id == -1) {
             game.pass();
-            std::cout << ">> AI [" << ai_str << "] passed.\n";
+            mcts->advance_tree(-1, MoveType::Pass, turn_color);
+            std::cout << ">> AI [" << ai_str << "] passed (" << rollouts << " rollouts, " << rps
+                      << " rps | tree visits: " << total_visits << ").\n";
         } else {
             MoveStatus st = game.play_move(best_id);
             if (st == MoveStatus::Success) {
+                mcts->advance_tree(best_id, MoveType::Place, turn_color);
                 Point pt = toPoint(best_id, game.get_size());
                 char col_ch = static_cast<char>((pt.c < 8) ? ('A' + pt.c) : ('A' + pt.c + 1));
                 int go_row = game.get_size() - pt.r;
                 std::cout << ">> AI [" << ai_str << "] placed at (" << pt.r << ", " << pt.c
-                          << ") [" << col_ch << go_row << "].\n";
+                          << ") [" << col_ch << go_row << "] ("
+                          << rollouts << " rollouts, " << rps << " rps | tree visits: "
+                          << total_visits << ").\n";
             } else {
                 game.pass();
+                mcts->advance_tree(-1, MoveType::Pass, turn_color);
                 std::cout << ">> AI [" << ai_str << "] fallback passed.\n";
             }
         }
@@ -693,6 +737,7 @@ int main(int argc, char* argv[]) {
                 clear_screen();
                 std::cout << ">> Max move limit reached (" << max_moves << " moves). Forcing pass.\n";
                 game.pass();
+                if (mcts) mcts->advance_tree(-1, MoveType::Pass, turn);
             } else {
                 play_ai_turn(turn, ai_time_ms);
             }
@@ -781,9 +826,11 @@ int main(int argc, char* argv[]) {
             }
             bot_vs_bot = true;
             auto_ai_color = std::nullopt;
+            mcts.reset();
             std::cout << ">> Bot-vs-Bot started (" << ai_time_ms << " ms per move).\n";
             play_ai_turn(turn, ai_time_ms);
         } else if (cmd_lower == "gtp" || cmd_lower.rfind("gtp ", 0) == 0) {
+            mcts.reset();
             if (cmd_lower.size() > 4) {
                 auto maybe_ms = to_int(strip(cmd_lower.substr(4)));
                 if (maybe_ms.has_value() && *maybe_ms > 0) {
@@ -813,6 +860,7 @@ int main(int argc, char* argv[]) {
                 Game temp_game;
                 if (temp_game.load_from_file(path)) {
                     game = std::move(temp_game);
+                    mcts.reset();
                     std::cout << ">> Successfully loaded: " << path << "\n";
                     std::cout << game.get_log() << "\n";
                 } else {
@@ -823,29 +871,34 @@ int main(int argc, char* argv[]) {
                     if (auto_ai_color.has_value() && game.get_turn() == *auto_ai_color) {
                         game.undo();
                     }
+                    mcts.reset();
                     std::cout << ">> Undid last move.\n";
                 } else {
                     std::cout << ">> Nothing to undo!\n";
                 }
             } else if (cmd_lower == "redo" || cmd_lower == "r") {
                 if (game.redo()) {
+                    mcts.reset();
                     std::cout << ">> Redid move.\n";
                 } else {
                     std::cout << ">> Nothing to redo!\n";
                 }
             } else if (cmd_lower == "pass" || cmd_lower == "p") {
                 if (game.pass()) {
+                    if (mcts) mcts->advance_tree(-1, MoveType::Pass, turn);
                     std::cout << ">> " << turn_str << " passed.\n";
                 } else {
                     std::cout << ">> Cannot pass: game is already over.\n";
                 }
             } else if (cmd_lower == "resign") {
                 if (game.resign()) {
+                    mcts.reset();
                     std::cout << ">> " << turn_str << " resigned.\n";
                 } else {
                     std::cout << ">> Cannot resign: game is already over.\n";
                 }
             } else if (cmd_lower == "pvai" || cmd_lower.rfind("pvai ", 0) == 0) {
+                mcts.reset();
                 std::string arg = (cmd_lower.size() > 5) ? strip(cmd_lower.substr(5)) : "w";
                 if (arg == "off" || arg == "none" || arg == "pvp") {
                     auto_ai_color = std::nullopt;
@@ -872,6 +925,7 @@ int main(int argc, char* argv[]) {
                 MoveStatus status = game.play_move(move_id);
                 switch (status) {
                     case MoveStatus::Success: {
+                        if (mcts) mcts->advance_tree(move_id, MoveType::Place, turn);
                         Point pt = toPoint(move_id, game.get_size());
                         if (total_placed < hand) {
                             std::cout << ">> Black (X) placed handicap stone " << (total_placed + 1) << "/" << hand

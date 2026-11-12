@@ -17,3 +17,7 @@ tests/unfinished_logic/
 tests/
 old/
 gnugo-3.8/
+katago/
+bot-versions/
+training-data/
+gtp_logs/

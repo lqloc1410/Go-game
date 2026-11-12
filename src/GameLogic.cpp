@@ -1,5 +1,4 @@
 #include "GameLogic.hpp"
-thread_local std::mt19937 Board::gen{std::random_device{}()};
 // Definitions for Color-State conversion.
 std::optional<Color> StatetoColor(State state){
     if (state == State::Black){
@@ -74,10 +73,12 @@ DSU::DSU(int sz){
 
 // AI-assisted: see AI22
 // Standard DSU stuff
-int DSU::get(int16_t u){
+const int DSU::get(int16_t u) const{
     // No path compression here to make it easy to roll back to a previous state.
     // Changes time complexity of DSU to O(logn) instead of O(a(n)).
-    while (u != parent[u]) u = parent[u];
+    int limit = board_size * board_size;
+    int count = 0;
+    while (u != parent[u] && ++count <= limit) u = parent[u];
     return u;
 }
 
@@ -115,7 +116,7 @@ bool DSU::join(int16_t u, int16_t v){
 
 // Helper operations for liberties
 // AI-assisted: see AI20, AI23
-int DSU::count_liberty(int16_t u){
+const int DSU::count_liberty(int16_t u) const{
     int16_t ru = get(u);
     return liberties[ru].count();
 }
@@ -156,6 +157,8 @@ void DSU::remove_liberty(int16_t u, int16_t lib_cell) {
 void DSU::clear_group(int u) {
     // Traverses the group containing id u to reset DSU node states
     int curr = u;
+    int limit = board_size * board_size;
+    int count = 0;
     do {
         int next = next_stone[curr];
 
@@ -166,21 +169,25 @@ void DSU::clear_group(int u) {
         next_stone[curr] = curr;
 
         curr = next;
+        if (++count > limit) break;
     } while (curr != u);
 }
 
 // AI-assisted: see AI10
 // Function to get a connected group.
-std::vector<int16_t> DSU::get_group(int u) {
+const std::vector<int16_t> DSU::get_group(int u) const {
     std::vector<int16_t> group_members;
-    group_members.reserve(cmp_size[get(u)]);
+    int limit = board_size * board_size;
+    group_members.reserve(std::min<int>(cmp_size[get(u)], limit));
 
     // Traverses the group containing id u
     int curr = u;
+    int count = 0;
     do {
         int next = next_stone[curr];
         group_members.push_back(static_cast<int16_t>(curr));
         curr = next;
+        if (++count > limit) break;
     } while (curr != u);
 
     return group_members;
@@ -235,6 +242,24 @@ void DSU::rollback(Checkpoint cp) {
             }
         }
     }
+}
+
+const int16_t DSU::get_single_liberty(int16_t u) const{
+    int16_t ru = get(u);
+    if (liberties[ru].count() != 1) return -1;
+    #if defined (__GNUC__)
+        return liberties[ru]._Find_first();
+    #else
+        int16_t pos = -1;
+        const auto& bs_view = liberties[ru];
+        for (int i = 0; i < board_size*board_size; ++i){
+            if (bs_view.test(i)){
+                if (pos == -1) pos = i;
+                else return -1;
+            }
+        }
+        return pos;
+    #endif
 }
 
 UndoState::UndoState(MoveType t, Color c){
@@ -395,6 +420,14 @@ Board::Board(int sz, double km){
     seen_hashes.push_back(curr_hash);
     get_rand = std::uniform_int_distribution(0, sz * sz - 1);
     st.reserve(cell_cnt);
+    std::random_device rd;
+    gen.seed(rd());
+
+    empty_cnt = cell_cnt;
+    for (int16_t i = 0; i < cell_cnt; ++i) {
+        empty_cells[i] = i;
+        empty_idx[i] = i;
+    }
 }
 
 // AI-assisted: see AI17
@@ -442,50 +475,51 @@ bool Board::is_eye(int16_t id, Color color) {
     int r = id / board_size, c = id % board_size;
 
     State my_state = ColortoState(color);
-    State opp_state = ColortoState(invertColor(color));
 
     for (int i = 0; i < 4; ++i) {
         int nr = r + dr[i], nc = c + dc[i];
         if (nr < 0 || nr >= board_size || nc < 0 || nc >= board_size) continue;
-        if (board[nr * board_size + nc] != my_state) return false;
+        int nid = nr * board_size + nc;
+        if (board[nid] != my_state) return false;
+        if (liberty_tracker.count_liberty(nid) <= 1) return false;
     }
 
-    int valid = 0, opp = 0;
+    int valid = 0, friendly = 0;
     for (int i = 0; i < 4; ++i) {
         int nr = r + drd[i], nc = c + dcd[i];
         if (nr < 0 || nr >= board_size || nc < 0 || nc >= board_size) continue;
         valid += 1;
-        if (board[nr * board_size + nc] == opp_state) opp += 1;
+        if (board[nr * board_size + nc] == my_state) friendly += 1;
     }
 
-    return !((valid == 4 && opp > 1) || (valid < 4 && opp > 0));
+    return (valid == 4) ? (friendly >= 3) : (friendly == valid);
 }
 
 int16_t Board::getRandPoint(Color color) {
-    int16_t empty_buf[CELL_CNT];
-    int remaining = 0;
-    for (int16_t i = 0; i < cell_cnt; ++i) {
-        if (board[i] == State::Empty) {
-            empty_buf[remaining++] = i; // <-- Only checks State::Empty! (No is_legal, no heap alloc)
+    if (empty_cnt == 0) return -1;
+
+    // 1. Pick a uniform random starting point in the packed array
+    int start = static_cast<int>((static_cast<uint64_t>(gen()) * empty_cnt) >> 32);
+
+    // 2. Check every empty cell starting from that random point
+    for (int i = 0; i < empty_cnt; ++i) {
+        int idx = start + i;
+        if (idx >= empty_cnt) idx -= empty_cnt; // wrap around cyclically
+
+        int16_t nid = empty_cells[idx];
+        if (!is_eye(nid, color) && is_legal(nid, color)) {
+            return nid; // Found a valid move!
         }
     }
 
-    while (remaining > 0) {
-        int idx = static_cast<int>((static_cast<uint64_t>(gen()) * remaining) >> 32);
-        int16_t nid = empty_buf[idx];
-        if (!is_eye(nid, color) && is_legal(nid, color)) { // <-- Only called ONCE (on the 1 picked cell)!
-            return nid;
-        }
-        empty_buf[idx] = empty_buf[--remaining];
-    }
-
+    // 3. ONLY returns -1 if EVERY single empty cell was tested and none were valid
     return -1;
 }
 
 std::vector<int16_t> Board::getReasonablePtsShuffled(Color color) {
     std::vector<int16_t> ans;
     ans.reserve(cell_cnt + 1);
-    bool has_stones = (black_cnt + white_cnt) > 0;
+    bool has_stones = (black_cnt + white_cnt) > (board_size * 2);
 
     for (int16_t i = 0; i < cell_cnt; ++i) {
         if (board[i] != State::Empty) continue;
@@ -569,6 +603,8 @@ MoveState Board::place(int16_t curr_id, Color color) {
     // AI-assisted: see AI19
     liberty_tracker.reset(curr_id);
     board[curr_id] = my_state;
+    remove_empty(curr_id);
+
     curr_hash = tmp_hash;
     seen_hashes.push_back(curr_hash);
 
@@ -586,7 +622,9 @@ MoveState Board::place(int16_t curr_id, Color color) {
 
     // AI-assisted: see AI03
     for (int16_t dead_id : captured) {
+        liberty_tracker.reset(dead_id);
         board[dead_id] = State::Empty;
+        add_empty(dead_id);
         int r = dead_id / board_size, c = dead_id % board_size;
         for (int i = 0; i < 4; ++i) {
             int nr = r + dr[i], nc = c + dc[i];
@@ -621,9 +659,11 @@ MoveState Board::place(Point point, Color color){
 void Board::undo(const UndoState &state){
     if (state.type != MoveType::Place) return;
     board[state.id] = State::Empty;
+    add_empty(state.id);
     State opp_state = ColortoState(invertColor(state.color));
     for (int16_t i: state.captured){
         board[i] = opp_state;
+        remove_empty(i);
     }
     // AI-assisted: see AI20
     liberty_tracker.rollback(state.dsu_cp);
@@ -654,7 +694,7 @@ int16_t Board::to_id(int r, int c) const {
 }
 
 State Board::get_cell(int r, int c) const {
-    if (r < 0 || c < 0 || r >= board_size || c >= board_size) return State::Empty;
+    if (r < 0 || c < 0 || r >= board_size || c >= board_size) return State::OutOfBounds;
     return board[get(r, c)];
 }
 
