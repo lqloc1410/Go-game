@@ -17,3 +17,6 @@ tests/unfinished_logic/
 tests/
 old/
 build-release/
+training-data/
+katago/
+gnugo-3.8/
