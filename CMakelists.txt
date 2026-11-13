@@ -36,6 +36,23 @@ endif()
 
 FetchContent_MakeAvailable(SFML)
 
+option(GO_NATIVE "Compile with -march=native (fast, but only runs on this CPU)" OFF)
+option(GO_LTO    "Link-time optimization in Release builds" ON)
+
+include(CheckIPOSupported)
+check_ipo_supported(RESULT IPO_OK OUTPUT IPO_MSG LANGUAGES CXX)
+if(GO_LTO AND NOT IPO_OK)
+    message(WARNING "LTO not supported by this toolchain: ${IPO_MSG}")
+endif()
+
+function(go_optimize target)
+    if(GO_NATIVE)
+        target_compile_options(${target} PRIVATE -march=native)
+    endif()
+    if(GO_LTO AND IPO_OK)
+        set_property(TARGET ${target} PROPERTY INTERPROCEDURAL_OPTIMIZATION_RELEASE ON)
+    endif()
+endfunction()
 set (SOURCES
     src/mode/gameSession.cpp
     src/ui/fonts.cpp
@@ -50,12 +67,28 @@ set (SOURCES
 )
 
 add_library(GoCore STATIC ${SOURCES})
+go_optimize(GoCore)
 target_include_directories(GoCore PUBLIC include)
 target_link_libraries(GoCore PUBLIC sfml-graphics sfml-window sfml-system sfml-audio)
 
 function(add_go_program e)
     add_executable(${e} src/${e}.cpp)
     target_link_libraries(${e} PRIVATE GoCore)
+
+     # SFML audio needs OpenAL
+    add_custom_command(TARGET ${e} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${sfml_SOURCE_DIR}/extlibs/bin/x64/openal32.dll"
+            $<TARGET_FILE_DIR:${e}>)
+
+    # winpthread comes from the MinGW toolchain folder (next to g++.exe)
+    get_filename_component(MINGW_BIN "${CMAKE_CXX_COMPILER}" DIRECTORY)
+    if(EXISTS "${MINGW_BIN}/libwinpthread-1.dll")
+        add_custom_command(TARGET ${e} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${MINGW_BIN}/libwinpthread-1.dll"
+                $<TARGET_FILE_DIR:${e}>)
+    endif()
 
     if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
         target_link_options(${e} PRIVATE -static-libgcc -static-libstdc++)
@@ -71,6 +104,7 @@ function(add_go_program e)
             "${CMAKE_BINARY_DIR}/_deps/sfml-src/extlibs/bin/x64/openal32.dll"
             $<TARGET_FILE_DIR:${e}>)
     endif()
+    go_optimize(${e}) 
 endfunction()
 
 add_go_program(main)
