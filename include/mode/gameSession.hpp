@@ -3,6 +3,9 @@
 #include "GameLogic.hpp"
 #include "Game.hpp"
 #include "GameParser.hpp"
+#include <optional>
+#include <utility>
+#include <vector>
 
 //enum class MoveResult { Ok, Occupied, Invalid, GameOver, OutOfBoard };
 
@@ -20,9 +23,27 @@ public:
     void reset() { newGame(size_, komi_, handicap); }          
     
     MoveInfo play(int x, int y);              // x = cột, y = hàng
-    bool pass() { return game_.pass(); }
-    bool undo() { return game_.undo(); }
-    bool redo() { return game_.redo(); }
+    bool pass() {
+        if (game_.pass()) {
+            moves_.push_back({-1, -1, true});
+            redoMoves_.clear();
+        }
+        return game_.pass();
+    }
+    bool undo() {
+        if(game_.undo() && !moves_.empty()) {
+            redoMoves_.push_back(moves_.back());
+            moves_.pop_back();
+        }
+        return game_.undo(); 
+    }
+    bool redo() {
+        if (game_.undo() && !redoMoves_.empty()) {
+            moves_.push_back(redoMoves_.back());
+            redoMoves_.pop_back();
+        }
+        return game_.redo(); 
+    }
     bool resign() {return game_.resign();}
 
     int    size() const { return size_; }
@@ -52,11 +73,23 @@ public:
         return status;
     }
 
+    std::optional<std::pair<int, int>> lastMove() const {
+        if (moves_.empty() || moves_.back().pass) return std::nullopt;
+        return std::make_pair(moves_.back().x, moves_.back().y);
+    }
+
     EndgameStatus endgameStatus() const {return game_.is_game_over();}
     std::optional<Color> resignedPlayer() const {return game_.get_resigned_player();}
+
+
 private:
     int size_{};
     float komi_{};
     int handicap{};
     Game game_;
+    struct Move {
+        int x, y;
+        bool pass;
+    };
+    std::vector<Move> moves_, redoMoves_;
 };

@@ -1,6 +1,8 @@
 #include "ui/board.hpp"
 #include <cmath>
 #include <vector>
+#include <algorithm>
+
 // AI-assisted: see AI33
 BoardView::BoardView(int boardSize, float pixelSize, sf::Vector2f origin)
     : n_(boardSize), size_(pixelSize), origin_(origin) {
@@ -110,6 +112,22 @@ void BoardView::draw(sf::RenderWindow& w,
         stone.setFillColor(c);
         stone.setOutlineThickness(0.f);
         w.draw(stone);
+    }
+    
+    if (lastMove) {
+        int who = stoneAt(lastMove -> x, lastMove -> y);
+        if (who != 0) {
+            sf::Color ring = (who == 1) ? style.whiteStone : style.blackStone;
+            ring.a = 255;
+            float mr = r * 0.60f;
+            sf::CircleShape mark(mr);
+            mark.setOrigin(mr, mr);
+            mark.setPosition(gridToPixel(lastMove -> x, lastMove -> y));
+            mark.setFillColor(sf::Color::Transparent);
+            mark.setOutlineThickness(std::max(2.f, r * 0.10f));
+            mark.setOutlineColor(ring);
+            w.draw(mark);
+        }
     }
 }
 void BoardView::rebuildStatic() const {

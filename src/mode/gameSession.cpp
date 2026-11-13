@@ -7,6 +7,8 @@ void GameSession::newGame(int boardSize, float komi, int handicap_cnt) {
     size_ = game_.get_size();
     handicap = game_.get_history().get_handicap_cnt();
     komi_ = static_cast<float>(game_.get_komi());
+    moves_.clear();
+    redoMoves_.clear();
 }
 
 MoveInfo GameSession::play(int x, int y) {
@@ -22,6 +24,8 @@ MoveInfo GameSession::play(int x, int y) {
 
     MoveStatus stat = game_.play_move(y, x);
     if (stat != MoveStatus::Success) return {stat}; 
+    moves_.push_back({x, y, false});
+    redoMoves_.clear();
 
     return {stat, before - oppCount()};
 }

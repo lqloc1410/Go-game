@@ -235,7 +235,10 @@ int main() {
                 break;
 
             case screen::Game:
-                board.draw(window, stoneAt, game.currentPlayer());
+                std::optional<GridPos> last;
+                if (auto m = game.lastMove()) last = GridPos{m -> first, m -> second};
+
+                board.draw(window, stoneAt, game.currentPlayer(), last);
                 hud.draw(window, 800.f, game.currentPlayer(), game.isGameOver(), game.blackStones(), game.whiteStones());
                 break;
         }
