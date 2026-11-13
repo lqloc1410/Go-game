@@ -10,7 +10,8 @@
 #include <cmath>
 #include <thread>
 #include <fstream>
-#include <unordered_map>
+#include <algorithm>
+#include <cstring>
 #include <GameLogic.hpp>
 
 static inline std::pair<int, int> transform_offset(int i, int j, int k) {
@@ -27,65 +28,121 @@ static inline std::pair<int, int> transform_offset(int i, int j, int k) {
     }
 }
 
-inline uint16_t serializer3x3_raw(const Board& board, int16_t r_center, int16_t c_center, Color color, int k = 0){
-    uint16_t encoded{};
-    for (int i = -1; i <= 1; ++i){
-        for (int j = -1; j <= 1; ++j){
-            if (i == 0 && j == 0) continue;
-            auto [di, dj] = transform_offset(i, j, k);
-            int nr = r_center + di;
-            int nc = c_center + dj;
+inline uint16_t serialize_3x3(
+    const Board& board, int16_t r_center, int16_t c_center, Color color)
+{
+    static constexpr uint8_t kMapBlack[4] = {0, 1, 2, 3};
+    static constexpr uint8_t kMapWhite[4] = {0, 2, 1, 3};
+    const uint8_t* cmap = (color == Color::Black) ? kMapBlack : kMapWhite;
 
-            State cell_state = board.get_cell(nr, nc);
-            if (cell_state == State::Empty) encoded <<= 2;
-            else if (cell_state == State::OutOfBounds) encoded = (encoded << 2) + 3;
-            else encoded = (encoded << 2) + (*StatetoColor(cell_state) == color ? 1 : 2);
+    uint8_t patch[3][3]{};
+    const int sz = board.get_size();
+
+    if (r_center >= 1 && r_center < sz - 1 && c_center >= 1 && c_center < sz - 1) {
+        const int base = (r_center - 1) * sz + (c_center - 1);
+        for (int dr = 0; dr < 3; ++dr) {
+            const int row_base = base + dr * sz;
+            for (int dc = 0; dc < 3; ++dc) {
+                patch[dr][dc] = cmap[static_cast<uint8_t>(board.get_cell_unchecked(row_base + dc))];
+            }
+        }
+    } else {
+        for (int dr = 0; dr < 3; ++dr) {
+            for (int dc = 0; dc < 3; ++dc) {
+                State s = board.get_cell(r_center + dr - 1, c_center + dc - 1);
+                patch[dr][dc] = cmap[static_cast<uint8_t>(s)];
+            }
         }
     }
 
-    return encoded;
-}
+    uint16_t min3 = 0xFFFFU;
 
-inline uint16_t serializer3x3(const Board& board, int16_t r_center, int16_t c_center, Color color){
-    uint16_t encoded = 0xFFFF;
-    for (int i = 0; i < 8; ++i){
-        encoded = std::min(encoded, serializer3x3_raw(board, r_center, c_center, color, i));
+    for (int k = 0; k < 8; ++k) {
+        uint16_t enc3 = 0;
+        for (int i = -1; i <= 1; ++i) {
+            for (int j = -1; j <= 1; ++j) {
+                if (i == 0 && j == 0) continue;
+                auto [di, dj] = transform_offset(i, j, k);
+                enc3 = static_cast<uint16_t>((enc3 << 2) | patch[1 + di][1 + dj]);
+            }
+        }
+        min3 = std::min(min3, enc3);
     }
 
-    return encoded;
+    return min3;
 }
 
-inline uint64_t serializer5x5_raw(const Board& board, int16_t r_center, int16_t c_center, Color color, int k = 0){
-    uint64_t encoded{};
-    for (int i = -2; i <= 2; ++i){
-        for (int j = -2; j <= 2; ++j){
-            if (i == 0 && j == 0) continue;
-            auto [di, dj] = transform_offset(i, j, k);
-            int nr = r_center + di;
-            int nc = c_center + dj;
+/// Computes canonical (D4 symmetry-minimized) 3x3 and 5x5 pattern hashes in a single 5x5 patch read.
+inline std::pair<uint16_t, uint64_t> serialize_patterns(
+    const Board& board, int16_t r_center, int16_t c_center, Color color)
+{
+    static constexpr uint8_t kMapBlack[4] = {0, 1, 2, 3};
+    static constexpr uint8_t kMapWhite[4] = {0, 2, 1, 3};
+    const uint8_t* cmap = (color == Color::Black) ? kMapBlack : kMapWhite;
 
-            State cell_state = board.get_cell(nr, nc);
-            if (cell_state == State::Empty) encoded <<= 2;
-            else if (cell_state == State::OutOfBounds) encoded = (encoded << 2) + 3;
-            else encoded = (encoded << 2) + (*StatetoColor(cell_state) == color ? 1 : 2);
+    uint8_t patch[5][5]{};
+    const int sz = board.get_size();
+
+    if (r_center >= 2 && r_center < sz - 2 && c_center >= 2 && c_center < sz - 2) {
+        const int base = (r_center - 2) * sz + (c_center - 2);
+        for (int dr = 0; dr < 5; ++dr) {
+            const int row_base = base + dr * sz;
+            for (int dc = 0; dc < 5; ++dc) {
+                patch[dr][dc] = cmap[static_cast<uint8_t>(board.get_cell_unchecked(row_base + dc))];
+            }
+        }
+    } else {
+        for (int dr = 0; dr < 5; ++dr) {
+            for (int dc = 0; dc < 5; ++dc) {
+                State s = board.get_cell(r_center + dr - 2, c_center + dc - 2);
+                patch[dr][dc] = cmap[static_cast<uint8_t>(s)];
+            }
         }
     }
 
-    return encoded;
-}
+    uint16_t min3 = 0xFFFFU;
+    uint64_t min5 = 0xFFFFFFFFFFFFFFFFULL;
 
-inline uint64_t serializer5x5(const Board& board, int16_t r_center, int16_t c_center, Color color){
-    uint64_t encoded = 0xFFFFFFFFFFFFFFFFULL;
-    for (int i = 0; i < 8; ++i){
-        encoded = std::min(encoded, serializer5x5_raw(board, r_center, c_center, color, i));
+    for (int k = 0; k < 8; ++k) {
+        uint16_t enc3 = 0;
+        for (int i = -1; i <= 1; ++i) {
+            for (int j = -1; j <= 1; ++j) {
+                if (i == 0 && j == 0) continue;
+                auto [di, dj] = transform_offset(i, j, k);
+                enc3 = static_cast<uint16_t>((enc3 << 2) | patch[2 + di][2 + dj]);
+            }
+        }
+        min3 = std::min(min3, enc3);
+
+        uint64_t enc5 = 0;
+        for (int i = -2; i <= 2; ++i) {
+            for (int j = -2; j <= 2; ++j) {
+                if (i == 0 && j == 0) continue;
+                auto [di, dj] = transform_offset(i, j, k);
+                enc5 = (enc5 << 2) | patch[2 + di][2 + dj];
+            }
+        }
+        min5 = std::min(min5, enc5);
     }
 
-    return encoded;
+    return {min3, min5};
+}
+
+/// Returns true iff the 3x3 pattern hash contains at least one stone (01/10),
+/// ignoring Empty (00) and OutOfBounds (11) where both bits in the pair match.
+inline bool pattern3x3_has_stone(uint16_t h){
+    return ((h ^ (h >> 1)) & 0x5555U) != 0;
+}
+
+/// Returns true iff the 5x5 pattern hash (48 bits) contains at least one stone (01/10).
+inline bool pattern5x5_has_stone(uint64_t h){
+    return ((h ^ (h >> 1)) & 0x0000555555555555ULL) != 0;
 }
 
 class patterns3x3{
 private: 
     std::array<int32_t, 65536> freq{};
+    std::array<uint32_t, 65536> rollout_w{};
 
 public:
     patterns3x3(const std::string &filepath){
@@ -96,19 +153,29 @@ public:
         }
 
         in.read(reinterpret_cast<char*>(freq.data()), 65536 * sizeof(int32_t));
+
+        for (size_t i = 0; i < 65536; ++i) {
+            if (freq[i] > 0) {
+                rollout_w[i] = static_cast<uint32_t>(1.0 + 10.0 * std::log1p(static_cast<double>(freq[i])));
+            }
+        }
     }
 
     int32_t operator[](int id) const {
         if (id < 0 || id >= 65536) return 0;
         return freq[id];
     }
+
+    uint32_t weight(uint16_t id) const { return rollout_w[id]; }
 };
 
 class patterns5x5{
-private: 
-    std::unordered_map<uint64_t, int32_t> freq;
+private:
+    std::vector<uint64_t> keys;
+    std::vector<int32_t> counts;
 
 public:
+    /// Loads 5x5 pattern frequencies into sorted parallel arrays for cache-friendly O(log N) lookup.
     patterns5x5(const std::string &filepath){
         std::ifstream in(filepath, std::ios::binary);
         if (!in.is_open()){
@@ -118,23 +185,57 @@ public:
 
         uint64_t sz = 0;
         in.read(reinterpret_cast<char*>(&sz), sizeof(sz));
-        freq.reserve(sz);
+        if (!in || sz == 0) return;
 
-        for (uint64_t i = 0; i < sz; ++i){
-            uint64_t id = 0;
-            in.read(reinterpret_cast<char*>(&id), sizeof(id));
-            
-            int32_t cnt = 0;
-            in.read(reinterpret_cast<char*>(&cnt), sizeof(cnt));
-            freq[id] = cnt;
+        constexpr size_t kRecordBytes = sizeof(uint64_t) + sizeof(int32_t);
+        std::vector<char> raw(static_cast<size_t>(sz) * kRecordBytes);
+        if (!in.read(raw.data(), static_cast<std::streamsize>(raw.size()))){
+            std::cerr << "Failed to read 5x5 pattern table: " << filepath << "\n";
+            return;
+        }
+
+        keys.resize(static_cast<size_t>(sz));
+        counts.resize(static_cast<size_t>(sz));
+        bool is_sorted = true;
+
+        for (size_t i = 0; i < static_cast<size_t>(sz); ++i){
+            const char* ptr = raw.data() + i * kRecordBytes;
+            std::memcpy(&keys[i], ptr, sizeof(uint64_t));
+            std::memcpy(&counts[i], ptr + sizeof(uint64_t), sizeof(int32_t));
+            if (i > 0 && keys[i] < keys[i - 1]) is_sorted = false;
+        }
+
+        if (!is_sorted){
+            std::vector<std::pair<uint64_t, int32_t>> entries(static_cast<size_t>(sz));
+            for (size_t i = 0; i < static_cast<size_t>(sz); ++i){
+                entries[i] = {keys[i], counts[i]};
+            }
+            std::sort(entries.begin(), entries.end(),
+                      [](const auto& a, const auto& b){ return a.first < b.first; });
+            for (size_t i = 0; i < static_cast<size_t>(sz); ++i){
+                keys[i] = entries[i].first;
+                counts[i] = entries[i].second;
+            }
         }
     }
 
     int32_t operator[](uint64_t id) const {
-        auto val = freq.find(id);
-        if (val == freq.end()) return 0;
-        return val->second;
+        auto it = std::lower_bound(keys.begin(), keys.end(), id);
+        if (it == keys.end() || *it != id) return 0;
+        return counts[static_cast<size_t>(it - keys.begin())];
     }
+};
+
+struct ScoredCandidate{
+    int16_t id;
+    double score;
+
+    ScoredCandidate() = default;
+    
+    ScoredCandidate(int16_t inp_id, double s){id = inp_id; score = s;}
+
+    bool operator<(const ScoredCandidate &rhs) const{return score < rhs.score;}
+    bool operator>(const ScoredCandidate &rhs) const{return score > rhs.score;}
 };
 
 struct MCTSNode{
@@ -146,29 +247,25 @@ struct MCTSNode{
     double wins = 0.0;
     double priority = 0.0;
     MCTSNode *parent = nullptr;
+
+    static constexpr int max_child_org = 10;
+
+    int max_child_cnt = 10;
+    std::vector<ScoredCandidate> unexpanded;
     std::vector<std::unique_ptr<MCTSNode>> children;
 
+    double total_child_score = 0.0;
     MCTSNode() = default;
 
     MCTSNode(Board &board, Color prev_p, MoveType t = MoveType::DEFAULT, int16_t move_id = -1, MCTSNode* p = nullptr);
 
-    bool is_fully_expanded() const { return moves_generated; }
+    bool is_fully_expanded() const { return moves_generated && unexpanded.empty(); }
     bool is_terminal() const {
         return (type == MoveType::Resign || (parent != nullptr && parent -> type == MoveType::Pass && type == MoveType::Pass));
     }
+    bool is_double_pass() const{return parent != nullptr && parent -> type == MoveType::Pass && type == MoveType::Pass;}
 
-    MCTSNode* select_best_child(double c = 5) const;
-};
-
-struct ScoredCandidate{
-    int16_t id;
-    double score;
-
-    ScoredCandidate() = default;
-    
-    ScoredCandidate(int16_t inp_id, double s){id = inp_id; score = s;}
-
-    const bool operator>(const ScoredCandidate &rhs) const{return score > rhs.score;}
+    MCTSNode* select_best_child(double c = 1) const;
 };
 
 class MCTSInstance{
@@ -179,8 +276,7 @@ private:
     std::vector<UndoState> undo_stack;
 
     int max_expansion_size;
-    std::vector<ScoredCandidate> move_priority;
-    
+    std::vector<int16_t> raw_candidates;   
 
     MCTSNode* selectChild();
 
@@ -192,9 +288,13 @@ private:
 
     double score_candidate_move(int16_t id, Color player);
 
+    bool is_bad_self_atari(int16_t cid, const UndoState& u);
+
+    int16_t play_rand_move(Color color);
+
 public:
     MCTSInstance() = delete;
-    MCTSInstance(const Board &src_board, Color color, MoveType PrevMoveType = MoveType::DEFAULT, int expansion_size = 20);
+    MCTSInstance(const Board &src_board, Color color, MoveType PrevMoveType = MoveType::DEFAULT);
 
     int16_t get_best_move(int time_limit_ms = 1000);
 

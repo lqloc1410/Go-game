@@ -187,6 +187,8 @@ public:
     const int16_t get_single_liberty(int16_t u) const;
 
     const int get_group_size(int16_t u) const {return cmp_size[get(u)];}
+
+    const std::bitset<CELL_CNT>& get_liberties(int16_t u) const { return liberties[get(u)]; }
 };
 
 enum class MoveType : int8_t{Place, Pass, Resign, Setup, DEFAULT};
@@ -328,6 +330,14 @@ private:
     }
 public:
     void seed_gen(uint64_t s) { gen.seed(s); }
+
+    inline uint32_t rand_below(uint32_t bound) {
+        return static_cast<uint32_t>((static_cast<uint64_t>(gen()) * bound) >> 32);
+    }
+
+    inline uint64_t rand(){
+        return static_cast<uint64_t>(gen());
+    }
     // AI-assisted: see AI03
     Board(int sz = 19, double km = 7.5);
 
@@ -335,7 +345,7 @@ public:
     int16_t get(Point point) const;
 
     // Helper to get cell id from r, c
-    int16_t get(int r, int c) const;
+    inline int16_t get(int r, int c) const { return static_cast<int16_t>(r * board_size + c); }
 
     // AI-assisted: see AI17
     bool is_legal(int16_t curr_id, Color color);
@@ -345,9 +355,14 @@ public:
 
     bool is_eye(int16_t id, Color color);
 
-    int16_t getRandPoint(Color color);
+    inline int get_empty_cnt() const { return empty_cnt; }
+    inline int16_t get_empty_cell(int idx) const { return empty_cells[idx]; }
+    inline void copy_empty_cells(int16_t* dst) const {
+        std::copy_n(empty_cells.data(), empty_cnt, dst);
+    }
 
-    std::vector<int16_t> getReasonablePtsShuffled(Color color);
+    void getReasonablePts(Color color, std::vector<int16_t> &out);
+
     // AI-assisted: see AI02, AI03, AI04, AI05, AI08, AI19
     MoveState place(int16_t curr_id, Color color);
 
@@ -356,20 +371,34 @@ public:
     // AI-assisted: see AI05, AI08, AI20, AI23
     void undo(const UndoState &state);
 
-    int get_white_cnt() const;
+    inline int get_white_cnt() const { return white_cnt; }
 
-    int get_black_cnt() const;
+    inline int get_black_cnt() const { return black_cnt; }
 
-    int get_size() const;
+    inline int get_size() const { return board_size; }
 
     double get_komi() const;
 
     void set_komi(double km) { komi = km; }
 
-    int16_t to_id(int r, int c) const;
+    inline int16_t to_id(int r, int c) const {
+        if (r < 0 || c < 0 || r >= board_size || c >= board_size) return -1;
+        return get(r, c);
+    }
 
-    State get_cell(int r, int c) const;
+    inline State get_cell(int r, int c) const {
+        if (static_cast<unsigned>(r) >= static_cast<unsigned>(board_size) ||
+            static_cast<unsigned>(c) >= static_cast<unsigned>(board_size)) {
+            return State::OutOfBounds;
+        }
+        return board[get(r, c)];
+    }
 
+    inline State get_cell_unchecked(int id) const { return board[id]; }
+
+    inline bool is_empty_cell(int r, int c){
+        return get_cell(r, c) == State::Empty;
+    }
     // AI-assisted: see AI12
     void display(std::ostream& os = std::cout) const;
 
@@ -381,6 +410,8 @@ public:
     int16_t get_only_lib(int16_t u){ return liberty_tracker.get_single_liberty(u);}
 
     int count_lib(int16_t u) const { return liberty_tracker.count_liberty(u); }
+
+    const std::bitset<CELL_CNT>& get_liberties(int16_t u) const { return liberty_tracker.get_liberties(u); }
 
     int get_group_size(int16_t u){return liberty_tracker.get_group_size(u);}
 

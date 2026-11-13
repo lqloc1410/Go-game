@@ -274,10 +274,6 @@ RedoState::RedoState(int16_t inp_id, Color inp_color, MoveType inp_type){
     type = inp_type;
 }
 
-int16_t Board::get(int r, int c) const{
-    return r*board_size + c;
-}
-
 int16_t Board::get(Point point) const{
     return to_id(point.r, point.c);
 }
@@ -495,68 +491,55 @@ bool Board::is_eye(int16_t id, Color color) {
     return (valid == 4) ? (friendly >= 3) : (friendly == valid);
 }
 
-int16_t Board::getRandPoint(Color color) {
-    if (empty_cnt == 0) return -1;
-
-    // 1. Pick a uniform random starting point in the packed array
-    int start = static_cast<int>((static_cast<uint64_t>(gen()) * empty_cnt) >> 32);
-
-    // 2. Check every empty cell starting from that random point
-    for (int i = 0; i < empty_cnt; ++i) {
-        int idx = start + i;
-        if (idx >= empty_cnt) idx -= empty_cnt; // wrap around cyclically
-
-        int16_t nid = empty_cells[idx];
-        if (!is_eye(nid, color) && is_legal(nid, color)) {
-            return nid; // Found a valid move!
-        }
-    }
-
-    // 3. ONLY returns -1 if EVERY single empty cell was tested and none were valid
-    return -1;
-}
-
-std::vector<int16_t> Board::getReasonablePtsShuffled(Color color) {
-    std::vector<int16_t> ans;
-    ans.reserve(cell_cnt + 1);
-    bool has_stones = (black_cnt + white_cnt) > (board_size * 2);
+void Board::getReasonablePts(Color color, std::vector<int16_t> &out) {
+    out.clear();
+    int total_stones = black_cnt + white_cnt;
+    bool has_stones = total_stones > (board_size * 3);
+    bool allow_strategic_lines = total_stones < (cell_cnt / 3);
 
     for (int16_t i = 0; i < cell_cnt; ++i) {
         if (board[i] != State::Empty) continue;
 
         if (has_stones) {
             int r = i / board_size, c = i % board_size;
-            bool near_stone = false;
-            for (int dr_i = -2; dr_i <= 2 && !near_stone; ++dr_i) {
-                for (int dc_i = -2; dc_i <= 2; ++dc_i) {
-                    int nr = r + dr_i, nc = c + dc_i;
-                    if (nr >= 0 && nr < board_size && nc >= 0 && nc < board_size) {
-                        if (board[nr * board_size + nc] != State::Empty) {
-                            near_stone = true;
-                            break;
+            bool strategic_line = false;
+            if (allow_strategic_lines) {
+                int dist_r = std::min(r, board_size - 1 - r);
+                int dist_c = std::min(c, board_size - 1 - c);
+                int line = std::min(dist_r, dist_c);
+                strategic_line = (line == 2 || line == 3);
+            }
+
+            if (!strategic_line) {
+                bool near_stone = false;
+                for (int dr_i = -2; dr_i <= 2 && !near_stone; ++dr_i) {
+                    for (int dc_i = -2; dc_i <= 2; ++dc_i) {
+                        int nr = r + dr_i, nc = c + dc_i;
+                        if (nr >= 0 && nr < board_size && nc >= 0 && nc < board_size) {
+                            if (board[nr * board_size + nc] != State::Empty) {
+                                near_stone = true;
+                                break;
+                            }
                         }
                     }
                 }
+                if (!near_stone) continue;
             }
-            if (!near_stone) continue;
         }
 
         if (!is_eye(i, color) && is_legal(i, color)) {
-            ans.push_back(i);
+            out.push_back(i);
         }
     }
 
     // Fallback if all local moves are full/illegal
-    if (ans.empty()) {
+    if (has_stones && out.empty()) {
         for (int16_t i = 0; i < cell_cnt; ++i) {
             if (board[i] == State::Empty && !is_eye(i, color) && is_legal(i, color)) {
-                ans.push_back(i);
+                out.push_back(i);
             }
         }
     }
-
-    std::shuffle(ans.begin(), ans.end(), gen);
-    return ans;
 }
 
 // AI-assisted: see AI02, AI03, AI04, AI05, AI08, AI19
@@ -680,23 +663,7 @@ void Board::undo(const UndoState &state){
     }
 }
 
-int Board::get_white_cnt() const {return white_cnt;}
-
-int Board::get_black_cnt() const {return black_cnt;}
-
-int Board::get_size() const {return board_size;}
-
 double Board::get_komi() const {return komi;}
-
-int16_t Board::to_id(int r, int c) const {
-    if (r < 0 || c < 0 || r >= board_size || c >= board_size) return -1;
-    return static_cast<int16_t>(get(r, c));
-}
-
-State Board::get_cell(int r, int c) const {
-    if (r < 0 || c < 0 || r >= board_size || c >= board_size) return State::OutOfBounds;
-    return board[get(r, c)];
-}
 
 // AI-assisted: see AI12
 void Board::display(std::ostream& os) const {
