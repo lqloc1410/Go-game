@@ -21,7 +21,7 @@ void button::setLabel(const std::string& s) {
 
 void button::draw(sf::RenderWindow& w) {
     if (!enabled) {
-        box.setFillColor(sf::Color(68, 58, 53));
+        box.setFillColor(sf::Color(68, 58, 53,120));
         box.setOutlineColor(sf::Color(37, 37, 37));
         text.setFillColor(sf::Color(228, 221, 204));
     }

@@ -34,12 +34,21 @@ int main() {
     bg.setScale(scale, scale);
     bg.setPosition((w - bg_image.getSize().x * scale) / 2.f, (h - bg_image.getSize().y * scale) / 2.f);
 
+    sf::Texture woodTex;
+    if (!woodTex.loadFromFile("assets/image/wooden.jpg")) std::cerr<<"Could not load board texture";
+    woodTex.setSmooth(true);
 
+    boardStyle style;
+    style.boardTex = &woodTex;
+    board.setStyle(style);
 
 
     Fonts fonts;
     if (!fonts.load()) return 1;
     hudView hud(fonts);
+
+    sf::RectangleShape dim({1150.f, 800.f});
+    dim.setFillColor(sf::Color(0, 0, 0, 75));
 
     // AI-assisted: see AI43, AI44
 
@@ -209,6 +218,11 @@ int main() {
 
         window.clear(sf::Color(40, 40, 40));
         window.draw(bg);
+
+        if (screen != screen::Game) {
+            window.draw(dim);
+        }
+
         switch (screen) { // AI-assisted: see AI43, AI44
             case screen::Menu: 
                 menu.draw(window);
@@ -223,11 +237,8 @@ int main() {
             case screen::Game:
                 board.draw(window, stoneAt, game.currentPlayer());
                 hud.draw(window, 800.f, game.currentPlayer(), game.isGameOver(), game.blackStones(), game.whiteStones());
+                break;
         }
-
-        sf::RectangleShape dim({1150.f, 800.f});
-        dim.setFillColor(sf::Color(0, 0, 0, 75));
-        window.draw(dim);
         window.display();
     }
 }

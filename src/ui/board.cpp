@@ -7,9 +7,17 @@ BoardView::BoardView(int boardSize, float pixelSize, sf::Vector2f origin)
     recompute();
 }
 
-void BoardView::setBoardSize(int n) { n_ = n; recompute(); }
+void BoardView::setBoardSize(int n) { 
+    n_ = n; 
+    recompute();
+    staticDirty_ = true;
+ }
 void BoardView::setLayout(sf::Vector2f origin, float pixelSize) {
-    origin_ = origin; size_ = pixelSize; recompute();
+    origin_ = origin; 
+    size_ = pixelSize; 
+    recompute();
+    staticDirty_ = true;
+
 }
 
 void BoardView::recompute() { cell_ = size_ / (n_ + 1); }
@@ -42,35 +50,42 @@ static std::vector<GridPos> starPoints(int n) {
 
 void BoardView::draw(sf::RenderWindow& w,
                      const std::function<int(int, int)>& stoneAt,
-                     int currentPlayer) const {
-    // 1) nền gỗ
-    sf::Texture wood;
-    wood.loadFromFile("assets/image/wooden.jpg");
-    sf::RectangleShape bg({size_, size_});
-    bg.setPosition(origin_);
-    bg. setTexture(&wood);
-    bg.setFillColor(sf::Color(225, 225, 225, 200));
-    w.draw(bg);
+                     int currentPlayer, 
+                     std::optional<GridPos> lastMove) const {
+    // // 1) nền gỗ
+    // sf::Texture wood;
+    // wood.loadFromFile("assets/image/wooden.jpg");
+    // sf::RectangleShape bg({size_, size_});
+    // bg.setPosition(origin_);
+    // bg. setTexture(&wood);
+    // bg.setFillColor(sf::Color(225, 225, 225, 200));
+    // w.draw(bg);
 
-    // 2) các đường kẻ
-    sf::VertexArray lines(sf::Lines);
-    for (int i = 0; i < n_; ++i) {
-        sf::Vector2f a = gridToPixel(0, i), b = gridToPixel(n_ - 1, i);   // ngang
-        sf::Vector2f c = gridToPixel(i, 0), d = gridToPixel(i, n_ - 1);   // dọc
-        lines.append({a, sf::Color::Black}); lines.append({b, sf::Color::Black});
-        lines.append({c, sf::Color::Black}); lines.append({d, sf::Color::Black});
-    }
-    w.draw(lines);
+    // // 2) các đường kẻ
+    // sf::VertexArray lines(sf::Lines);
+    // for (int i = 0; i < n_; ++i) {
+    //     sf::Vector2f a = gridToPixel(0, i), b = gridToPixel(n_ - 1, i);   // ngang
+    //     sf::Vector2f c = gridToPixel(i, 0), d = gridToPixel(i, n_ - 1);   // dọc
+    //     lines.append({a, sf::Color::Black}); lines.append({b, sf::Color::Black});
+    //     lines.append({c, sf::Color::Black}); lines.append({d, sf::Color::Black});
+    // }
+    // w.draw(lines);
 
-    // 3) điểm sao
-    float starR = cell_ * 0.12f;
-    for (auto s : starPoints(n_)) {
-        sf::CircleShape dot(starR);
-        dot.setOrigin(starR, starR);
-        dot.setPosition(gridToPixel(s.x, s.y));
-        dot.setFillColor(sf::Color::Black);
-        w.draw(dot);
-    }
+    // // 3) điểm sao
+    // float starR = cell_ * 0.12f;
+    // for (auto s : starPoints(n_)) {
+    //     sf::CircleShape dot(starR);
+    //     dot.setOrigin(starR, starR);
+    //     dot.setPosition(gridToPixel(s.x, s.y));
+    //     dot.setFillColor(sf::Color::Black);
+    //     w.draw(dot);
+    // }
+
+    if (staticDirty_) rebuildStatic();
+    sf::Sprite layer(staticTex_.getTexture());
+    layer.setScale(1.f / kSuperSample, 1.f / kSuperSample);
+    layer.setPosition(origin_);
+    w.draw(layer);
 
     // 4) quân cờ
     float r = cell_ * 0.46f;
@@ -96,4 +111,41 @@ void BoardView::draw(sf::RenderWindow& w,
         stone.setOutlineThickness(0.f);
         w.draw(stone);
     }
+}
+void BoardView::rebuildStatic() const {
+    const unsigned px = static_cast<unsigned>(size_) * kSuperSample;
+    if (!staticTex_.create(px, px)) return;
+    staticTex_.setSmooth(true);
+    staticTex_.setView(sf::View(sf::FloatRect(0.f, 0.f, size_, size_)));  
+    staticTex_.clear(sf::Color::Transparent);
+
+    auto P = [&](int x, int y) { return sf::Vector2f(cell_ * (x + 1), cell_ * (y + 1)); };
+
+    sf::RectangleShape bg({size_, size_});
+    if (style.boardTex) { 
+        bg.setTexture(style.boardTex); 
+        bg.setFillColor(sf::Color::White); 
+    }
+    else {
+        bg.setFillColor(style.boardColor); 
+    }
+    staticTex_.draw(bg);
+
+    sf::VertexArray lines(sf::Lines);
+    for (int i = 0; i < n_; ++i) {
+        lines.append({P(0, i), style.lineColor});  lines.append({P(n_ - 1, i), style.lineColor});
+        lines.append({P(i, 0), style.lineColor});  lines.append({P(i, n_ - 1), style.lineColor});
+    }
+    staticTex_.draw(lines);
+
+    const float starR = cell_ * 0.12f;
+    for (auto s : starPoints(n_)) {
+        sf::CircleShape dot(starR);
+        dot.setOrigin(starR, starR);
+        dot.setPosition(P(s.x, s.y));
+        dot.setFillColor(style.lineColor);
+        staticTex_.draw(dot);
+    }
+    staticTex_.display();        
+    staticDirty_ = false;
 }
