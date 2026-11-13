@@ -11,3 +11,10 @@ debug/
 unfinished_logic/
 tests/
 old/
+katago/
+gnugo-3.8/
+gtp_logs/
+demo/
+training-data/
+.vscode/
+.obsidian/
