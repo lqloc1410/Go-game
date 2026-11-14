@@ -14,6 +14,86 @@
 #include <cstring>
 #include <GameLogic.hpp>
 
+namespace AIConstants {
+    // PUCT & selection
+    inline constexpr double kInitialBestScore = -1e9;
+    inline constexpr double kFpuReduction = 0.25;
+    inline constexpr double kDefaultParentWinrate = 0.5;
+    inline constexpr int kMaxSelectDepth = 300;
+    inline constexpr double kProgressiveWideningCoeff = 0.5;
+    inline constexpr uint32_t kTieBreakerRange = 1024;
+    inline constexpr double kTieBreakerScale = 1e-6;
+    inline constexpr double kRootPassScore = 16.0;
+    inline constexpr double kMidTreePassScore = 0.01;
+
+    // Candidate move scoring: pattern & tactical base
+    inline constexpr double kOwnEyeScore = 0.001;
+    inline constexpr double kBaseMoveScore = 1.0;
+    inline constexpr double kPattern5x5Weight = 3.0;
+    inline constexpr int kInfLiberties = 999;
+    inline constexpr int kMaxCounterCaptureChain = 16;
+    inline constexpr int kSafeCaptureMinLibs = 3;
+
+    // Candidate move scoring: penalties & bonuses
+    inline constexpr double kMultiStoneSelfAtariPenalty = 0.01;
+    inline constexpr double kThrowInAtariPenalty = 0.15;
+    inline constexpr double kSingleStoneSelfAtariPenalty = 0.02;
+    inline constexpr double kSelfLibertyTighteningPenalty = 0.05;
+    inline constexpr double kPureSelfLibertyFillPenalty = 0.02;
+    inline constexpr double kSharedLibertyDisadvantagePenalty = 0.25;
+    inline constexpr double kCaptureBonusPerStone = 20.0;
+    inline constexpr double kSaveAtariSafeBonusPerStone = 22.0;
+    inline constexpr double kSaveAtariTightBonusPerStone = 12.0;
+    inline constexpr double kDefendTwoLibBonusPerStone = 6.0;
+    inline constexpr double kConnectGroupsBonusPerStone = 2.5;
+    inline constexpr double kAtariSafeBonusPerStone = 5.0;
+    inline constexpr double kAtariTightBonusPerStone = 2.5;
+
+    // Candidate move scoring: opening & positional geometry
+    inline constexpr int kMinOpeningStoneLimit = 8;
+    inline constexpr int kOpeningCellDivisor = 12;
+    inline constexpr int kStrategicCellDivisor = 3;
+    inline constexpr int kSmallBoardSize = 9;
+    inline constexpr int kMediumBoardSize = 13;
+    inline constexpr int kSmallBoardCornerMax = 3;
+    inline constexpr int kLargeBoardCornerMax = 4;
+    inline constexpr double kOpeningFirstLinePenalty = 0.1;
+    inline constexpr double kOpeningSecondLineAnchoredPenalty = 0.6;
+    inline constexpr double kOpeningSecondLineEmptyPenalty = 0.35;
+    inline constexpr double kOpeningCornerBonus = 2.5;
+    inline constexpr double kOpeningSideBonus = 1.6;
+    inline constexpr double kTengenSmallBoardBonus = 1.8;
+    inline constexpr double kTengenMediumBoardBonus = 1.2;
+    inline constexpr double kTengenLargeBoardBonus = 1.0;
+    inline constexpr double kOpeningFloatingCenterPenalty = 0.6;
+    inline constexpr double kMidgameFirstLineAnchoredPenalty = 0.35;
+    inline constexpr double kMidgameFirstLineEmptyPenalty = 0.15;
+    inline constexpr double kMidgameOpenCornerBonus = 2.0;
+    inline constexpr double kMidgameOpenSideBonus = 1.4;
+    inline constexpr double kMoveScoreExponent = 1.25;
+
+    // Rollout & random play
+    inline constexpr int kFastRandomProbeThreshold = 8;
+    inline constexpr int kFastRandomProbeAttempts = 8;
+    inline constexpr double kResignScore = 1000.0;
+    inline constexpr int kEarlyDoublePassStoneFactor = 2;
+    inline constexpr int kRolloutMaxStepsFactor = 3;
+    inline constexpr int kRolloutCounterCaptureMaxSteps = 12;
+    inline constexpr uint32_t kLocalPatternRolloutDenom = 3;
+
+    // Backpropagation
+    inline constexpr double kScoreMarginScaleFactor = 0.15;
+    inline constexpr double kWinrateWeight = 0.85;
+    inline constexpr double kScoreMarginWeight = 0.15;
+
+    // Multi-threading & pass decision thresholds
+    inline constexpr uint32_t kThreadSeedStride = 10007U;
+    inline constexpr double kPassAfterOppPassWinrate = 0.50;
+    inline constexpr double kHopelessPositionWinrate = 0.15;
+    inline constexpr double kPassWinrateMargin = 0.03;
+    inline constexpr double kNormalTurnPassWinrate = 0.85;
+}
+
 static inline std::pair<int, int> transform_offset(int i, int j, int k) {
     switch (k) {
         case 0: return { i,  j}; // Identity (0 deg)

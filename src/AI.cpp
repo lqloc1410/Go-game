@@ -1,5 +1,7 @@
 #include <AI.hpp>
 
+using namespace AIConstants;
+
 static const patterns3x3 global_p3("lookup-tables/pattern3x3.bin");
 static const patterns5x5 global_p5("lookup-tables/pattern5x5.bin");
 
@@ -9,13 +11,12 @@ MCTSNode::MCTSNode(Board &board, Color prev_p, MoveType t, int16_t move_id, MCTS
 MCTSNode* MCTSNode::select_best_child(double c_puct) const{
     if (children.empty()) return nullptr;
     MCTSNode* best_child = nullptr;
-    double best_score = -1e9;
+    double best_score = kInitialBestScore;
 
     // First Play Urgency (FPU): unvisited children start slightly below parent's expected winrate
-    double fpu_reduction = 0.25;
     double parent_q = (this->visits > 0) 
-        ? std::max(0.0, (1.0 - (this->wins / this->visits)) - fpu_reduction) 
-        : 0.5;
+        ? std::max(0.0, (1.0 - (this->wins / this->visits)) - kFpuReduction) 
+        : kDefaultParentWinrate;
     double sqrt_parent_visits = std::sqrt(std::max(1, this->visits));
 
     for (const std::unique_ptr<MCTSNode>& child : children){
@@ -34,19 +35,19 @@ MCTSNode* MCTSNode::select_best_child(double c_puct) const{
 
 double MCTSInstance::score_candidate_move(int16_t id, Color player) {
     // Never prioritize filling our own true eye
-    if (board.is_eye(id, player)) return 0.001;
+    if (board.is_eye(id, player)) return kOwnEyeScore;
     int r = id / board.get_size(), c = id % board.get_size();
     auto [h3, h5] = serialize_patterns(board, r, c, player);
 
     // Base score from 3x3 and 5x5 pro/master pattern frequencies (only if stones exist nearby)
     double s3 = pattern3x3_has_stone(h3) ? std::log1p(static_cast<double>(global_p3[h3])) : 0.0;
     double s5 = pattern5x5_has_stone(h5) ? std::log1p(static_cast<double>(global_p5[h5])) : 0.0;
-    double move_score = 1.0 + s3 + 3.0 * s5;
+    double move_score = kBaseMoveScore + s3 + kPattern5x5Weight * s5;
 
     // Scan the 4 orthogonal neighbors to collect tactical context around `id`
     int save_sz = 0, defend_2lib_sz = 0, cap_sz = 0, atari_sz = 0;
     int empty_neighbors = 0, max_friendly_libs = 0, friendly_gsz_sum = 0;
-    int min_opp_libs = 999, opp_group_cnt = 0;
+    int min_opp_libs = kInfLiberties, opp_group_cnt = 0;
     int16_t empty_ids[4]{};
 
     SmallVec4 distinct_groups;
@@ -91,7 +92,7 @@ double MCTSInstance::score_candidate_move(int16_t id, Color player) {
     if (cap_roots.sz > 0) {
         State my_state = ColortoState(player);
         int bsz = board.get_size();
-        int16_t extra_saved[16]{};
+        int16_t extra_saved[kMaxCounterCaptureChain]{};
         int extra_saved_cnt = 0;
         for (int ci = 0; ci < cap_roots.sz; ++ci) {
             int16_t start = cap_roots.data[ci];
@@ -113,12 +114,12 @@ double MCTSInstance::score_candidate_move(int16_t id, Color player) {
                         }
                         if (!seen) {
                             save_sz += board.get_group_size(f_root);
-                            if (extra_saved_cnt < 16) extra_saved[extra_saved_cnt++] = f_root;
+                            if (extra_saved_cnt < kMaxCounterCaptureChain) extra_saved[extra_saved_cnt++] = f_root;
                         }
                     }
                 }
                 curr = board.get_next_stone(curr);
-            } while (curr != start && ++chain_steps < 16);
+            } while (curr != start && ++chain_steps < kMaxCounterCaptureChain);
         }
     }
 
@@ -150,9 +151,9 @@ double MCTSInstance::score_candidate_move(int16_t id, Color player) {
             new_gsz = 1 + friendly_gsz_sum;
         }
         have_result = true;
-    } else if (empty_neighbors >= 2 || max_friendly_libs >= 3) {
+    } else if (empty_neighbors >= 2 || max_friendly_libs >= kSafeCaptureMinLibs) {
         // Capturing >=1 opponent stone while having >=2 empty neighbors or a >=3-lib ally guarantees >=3 libs
-        new_libs = 3;
+        new_libs = kSafeCaptureMinLibs;
         new_gsz = 1 + friendly_gsz_sum;
         have_result = true;
     } else {
@@ -172,26 +173,26 @@ double MCTSInstance::score_candidate_move(int16_t id, Color player) {
             // Case A: Self-atari or losing snapback (1 liberty left and fewer stones captured than risked)
             if (new_gsz >= 2) {
                 // Multi-stone self-atari: almost always a blunder
-                move_score *= 0.01;
+                move_score *= kMultiStoneSelfAtariPenalty;
             } else {
                 // Single-stone self-atari (`cap_sz == 0`): only mildly viable if throwing in to put opp in atari
-                move_score *= (atari_sz > 0) ? 0.15 : 0.02;
+                move_score *= (atari_sz > 0) ? kThrowInAtariPenalty : kSingleStoneSelfAtariPenalty;
             }
         } else if (cap_sz == 0 && new_libs >= 2) {
             // Case B: Non-capturing safe move (`new_libs >= 2`), check for self-liberty tightening
-            if (new_libs == 2 && max_friendly_libs >= 3 &&
+            if (new_libs == 2 && max_friendly_libs >= kSafeCaptureMinLibs &&
                 (save_sz == 0 || (friendly_gsz_sum - save_sz) >= save_sz)) {
                 // Avoid dragging a >=3-liberty group down to 2 liberties (unless rescuing a bigger atari group)
-                move_score *= 0.05;
+                move_score *= kSelfLibertyTighteningPenalty;
             } else if (friendly_roots.sz == 1 && empty_neighbors == 0 &&
                        save_sz == 0 && atari_sz == 0) {
                 // Playing on an internal/adjacent point of a single friendly group with no new empty libs:
                 if (opp_group_cnt == 0) {
                     // Purely filling our own group's liberties without touching any opponent stone
-                    move_score *= 0.02;
+                    move_score *= kPureSelfLibertyFillPenalty;
                 } else if (new_libs < min_opp_libs - 1) {
                     // Filling a shared liberty when we already have fewer liberties than the opponent
-                    move_score *= 0.25;
+                    move_score *= kSharedLibertyDisadvantagePenalty;
                 } else {
                     apply_bonuses = true;
                 }
@@ -204,12 +205,12 @@ double MCTSInstance::score_candidate_move(int16_t id, Color player) {
         }
 
         if (apply_bonuses) {
-            if (cap_sz > 0) move_score += 20.0 * cap_sz;
+            if (cap_sz > 0) move_score += kCaptureBonusPerStone * cap_sz;
             if (new_libs >= 2) {
-                if (save_sz > 0) move_score += (new_libs >= 3 ? 22.0 : 12.0) * save_sz;
-                if (defend_2lib_sz > 0 && new_libs >= 3) move_score += 6.0 * defend_2lib_sz;
-                if (friendly_roots.sz >= 2 && new_libs >= 3) move_score += 2.5 * friendly_gsz_sum; // Connecting >=2 groups safely
-                if (atari_sz > 0) move_score += (new_libs >= 3 ? 5.0 : 2.5) * atari_sz;
+                if (save_sz > 0) move_score += (new_libs >= kSafeCaptureMinLibs ? kSaveAtariSafeBonusPerStone : kSaveAtariTightBonusPerStone) * save_sz;
+                if (defend_2lib_sz > 0 && new_libs >= kSafeCaptureMinLibs) move_score += kDefendTwoLibBonusPerStone * defend_2lib_sz;
+                if (friendly_roots.sz >= 2 && new_libs >= kSafeCaptureMinLibs) move_score += kConnectGroupsBonusPerStone * friendly_gsz_sum; // Connecting >=2 groups safely
+                if (atari_sz > 0) move_score += (new_libs >= kSafeCaptureMinLibs ? kAtariSafeBonusPerStone : kAtariTightBonusPerStone) * atari_sz;
             }
         }
     }
@@ -217,8 +218,8 @@ double MCTSInstance::score_candidate_move(int16_t id, Color player) {
     // Opening & early-midgame positional geometry (only when move has no local tactical urgency)
     int sz = board.get_size();
     int total_stones = board.get_white_cnt() + board.get_black_cnt();
-    int opening_limit = std::max(8, board.get_cell_cnt() / 12); // 8 (9x9), 14 (13x13), 30 (19x19)
-    int strategic_limit = board.get_cell_cnt() / 3;            // 27 (9x9), 56 (13x13), 120 (19x19)
+    int opening_limit = std::max(kMinOpeningStoneLimit, board.get_cell_cnt() / kOpeningCellDivisor); // 8 (9x9), 14 (13x13), 30 (19x19)
+    int strategic_limit = board.get_cell_cnt() / kStrategicCellDivisor;                             // 27 (9x9), 56 (13x13), 120 (19x19)
     bool local_stone = pattern5x5_has_stone(h5);
 
     if (save_sz == 0 && cap_sz == 0 && atari_sz == 0 && defend_2lib_sz == 0 && total_stones < strategic_limit) {
@@ -226,37 +227,37 @@ double MCTSInstance::score_candidate_move(int16_t id, Color player) {
         int dist_c = std::min(c, sz - 1 - c);
         int line = std::min(dist_r, dist_c);
         int other = std::max(dist_r, dist_c);
-        int corner_max = (sz <= 9) ? 3 : 4; // 3-3/3-4/4-4 on 9x9, up to 3-5/4-5 on 13x13/19x19
+        int corner_max = (sz <= kSmallBoardSize) ? kSmallBoardCornerMax : kLargeBoardCornerMax; // 3-3/3-4/4-4 on 9x9, up to 3-5/4-5 on 13x13/19x19
 
         if (total_stones < opening_limit) {
             bool is_tengen = (r == sz / 2 && c == sz / 2 && (sz % 2 == 1));
 
             if (line == 0) {
                 // Opening: strongly avoid 1st-line edge moves
-                move_score *= 0.1;
+                move_score *= kOpeningFirstLinePenalty;
             } else if (line == 1) {
                 // Opening: discourage 2nd-line moves unless anchored by a nearby stone
-                move_score *= local_stone ? 0.6 : 0.35;
+                move_score *= local_stone ? kOpeningSecondLineAnchoredPenalty : kOpeningSecondLineEmptyPenalty;
             } else if (line == 2 || line == 3) {
                 // Opening: favor 3rd/4th-line corner enclosures and side points
-                move_score *= (other <= corner_max) ? 2.5 : 1.6;
+                move_score *= (other <= corner_max) ? kOpeningCornerBonus : kOpeningSideBonus;
             } else if (is_tengen) {
-                move_score *= (sz <= 9) ? 1.8 : (sz <= 13 ? 1.2 : 1.0);
+                move_score *= (sz <= kSmallBoardSize) ? kTengenSmallBoardBonus : (sz <= kMediumBoardSize ? kTengenMediumBoardBonus : kTengenLargeBoardBonus);
             } else if (!local_stone) {
-                move_score *= 0.6; // Discourage unmotivated floating 5th+ line moves on 13x13/19x19
+                move_score *= kOpeningFloatingCenterPenalty; // Discourage unmotivated floating 5th+ line moves on 13x13/19x19
             }
         } else {
             if (line == 0 && friendly_roots.sz < 2) {
                 // Early-midgame: still discourage non-connecting 1st-line crawls
-                move_score *= local_stone ? 0.35 : 0.15;
+                move_score *= local_stone ? kMidgameFirstLineAnchoredPenalty : kMidgameFirstLineEmptyPenalty;
             } else if (!local_stone && (line == 2 || line == 3)) {
                 // Keep open 3rd/4th-line corners & extensions competitive past opening_limit
-                move_score *= (other <= corner_max) ? 2.0 : 1.4;
+                move_score *= (other <= corner_max) ? kMidgameOpenCornerBonus : kMidgameOpenSideBonus;
             }
         }
     }
 
-    return std::pow(move_score, 1.25);
+    return std::pow(move_score, kMoveScoreExponent);
 }
 
 static void remove_child(MCTSNode* parent, const MCTSNode* target) {
@@ -278,10 +279,10 @@ MCTSNode* MCTSInstance::selectChild(){
     if (!curr) return nullptr;
 
     int select_depth = 0;
-    while (!curr->is_terminal() && curr->moves_generated && select_depth < 300){
+    while (!curr->is_terminal() && curr->moves_generated && select_depth < kMaxSelectDepth){
         // Progressive widening: unlock more unexpanded moves as `curr->visits` grows
         if (!curr->unexpanded.empty()){
-            int new_child_cnt = curr->max_child_org + static_cast<int>(0.5 * std::sqrt(curr->visits));
+            int new_child_cnt = curr->max_child_org + static_cast<int>(kProgressiveWideningCoeff * std::sqrt(curr->visits));
             if (curr->max_child_cnt < new_child_cnt){
                 Color next_player = invertColor(curr->prev_player);
                 while (curr->max_child_cnt < new_child_cnt && !curr->unexpanded.empty()){
@@ -328,7 +329,7 @@ MCTSNode* MCTSInstance::selectChild(){
         curr->unexpanded.reserve(raw_candidates.size());
 
         for (int16_t id : raw_candidates) {
-            double score = score_candidate_move(id, next_player) + board.rand_below(1024) * 1e-6;
+            double score = score_candidate_move(id, next_player) + board.rand_below(kTieBreakerRange) * kTieBreakerScale;
             curr->unexpanded.push_back(ScoredCandidate(id, score));
             curr->total_child_score += score;
         }
@@ -338,7 +339,7 @@ MCTSNode* MCTSInstance::selectChild(){
 
         // Give Pass a strong prior only if opponent passed at the root or no board moves exist;
         // mid-tree pass nodes stay low-priority so MCTS doesn't assume the opponent will pass back.
-        double pass_score = ((curr == root.get() && curr->type == MoveType::Pass) || curr->unexpanded.empty()) ? 16.0 : 0.01;
+        double pass_score = ((curr == root.get() && curr->type == MoveType::Pass) || curr->unexpanded.empty()) ? kRootPassScore : kMidTreePassScore;
         curr->total_child_score += pass_score;
 
         int init_cnt = std::min(curr->max_child_cnt, static_cast<int>(curr->unexpanded.size()));
@@ -415,9 +416,9 @@ int16_t MCTSInstance::play_rand_move(Color color) {
         return true;
     };
 
-    if (n > 8){
+    if (n > kFastRandomProbeThreshold){
         // Fast path: uniform random probes (zero pool copy)
-        for (int tries = 0; tries < 8; ++tries) {
+        for (int tries = 0; tries < kFastRandomProbeAttempts; ++tries) {
             int idx = static_cast<int>(board.rand_below(static_cast<uint32_t>(n)));
             int16_t cand = board.get_empty_cell(idx);
             if (try_play(cand)) return cand;
@@ -440,13 +441,13 @@ int16_t MCTSInstance::play_rand_move(Color color) {
 
 double MCTSInstance::rollout(MCTSNode *node){
     if (node -> type == MoveType::Resign) {
-        return (node -> prev_player == Color::Black) ? 1000.0 : -1000.0;
+        return (node -> prev_player == Color::Black) ? kResignScore : -kResignScore;
     }
 
     // Even if node->type == MoveType::Pass (or Pass->Pass), play out remaining non-eye moves
     // so dead stones are captured before Tromp-Taylor area scoring runs.
     const bool is_double_pass = node -> is_double_pass();
-    if (is_double_pass && (board.get_black_cnt() + board.get_white_cnt()) <= 2 * board.get_size()) {
+    if (is_double_pass && (board.get_black_cnt() + board.get_white_cnt()) <= kEarlyDoublePassStoneFactor * board.get_size()) {
         return board.calculate_score();
     }
 
@@ -454,7 +455,7 @@ double MCTSInstance::rollout(MCTSNode *node){
     Color curr_turn = (is_double_pass && (node->visits & 1))
         ? node->prev_player
         : invertColor(node->prev_player);
-    int max_steps = 3 * board.get_size() * board.get_size();
+    int max_steps = kRolloutMaxStepsFactor * board.get_size() * board.get_size();
     int steps = 0;
     int16_t prev_move = node -> id;
     while (consec_pass < 2 && steps < max_steps){
@@ -538,7 +539,7 @@ double MCTSInstance::rollout(MCTSNode *node){
                             }
                         }
                         curr = board.get_next_stone(curr);
-                    } while (curr != best_fr_stone && ++chain_steps < 12);
+                    } while (curr != best_fr_stone && ++chain_steps < kRolloutCounterCaptureMaxSteps);
                     return false;
                 };
 
@@ -560,7 +561,7 @@ double MCTSInstance::rollout(MCTSNode *node){
         }
 
         // Rollout heuristic 3: 2/3 chance to pick a 3x3 pattern-weighted neighbor of `prev_move`
-        if (!is_special_case && prev_move != -1 && board.rand_below(3) != 0) {
+        if (!is_special_case && prev_move != -1 && board.rand_below(kLocalPatternRolloutDenom) != 0) {
             int r = prev_move / board.get_size(), c = prev_move % board.get_size();
             int16_t cands[8];
             uint32_t weights[8];
@@ -633,7 +634,7 @@ double MCTSInstance::rollout(MCTSNode *node){
 }
 
 void MCTSInstance::backprop(MCTSNode *node, double score){
-    const double scale = 0.15 * board.get_cell_cnt();
+    const double scale = kScoreMarginScaleFactor * board.get_cell_cnt();
     while (node != nullptr){
         node -> visits++;
 
@@ -642,7 +643,7 @@ void MCTSInstance::backprop(MCTSNode *node, double score){
         double win = (margin > 0.0) ? 1.0 : 0.0;
         double bonus = 0.5 + 0.5 * std::tanh(margin / scale);
         // 85% binary win/loss + 15% smooth score margin to break ties in clearly won/lost games
-        node -> wins += 0.85 * win + 0.15 * bonus;
+        node -> wins += kWinrateWeight * win + kScoreMarginWeight * bonus;
 
         node = node -> parent;
     }
@@ -658,7 +659,7 @@ void MCTSInstance::rollback(){
 MCTSInstance::MCTSInstance(const Board &src_board, Color color, MoveType PrevMoveType){
     AIColor = color;
     board = src_board;
-    undo_stack.reserve(3 * board.get_size() * board.get_size());
+    undo_stack.reserve(kRolloutMaxStepsFactor * board.get_size() * board.get_size());
     root = std::make_unique<MCTSNode>(board, invertColor(AIColor), PrevMoveType);
     raw_candidates.reserve(CELL_CNT);
 }
@@ -718,7 +719,7 @@ MCTSThreads::MCTSThreads(const Board &board, Color color, MoveType type, unsigne
     uint32_t base_seed = rd();
     for (unsigned int i = 0; i < thread_cnt; ++i){
         instances.emplace_back(board, color, type);
-        instances.back().get_board().seed_gen(base_seed + i * 10007 + 1);
+        instances.back().get_board().seed_gen(base_seed + i * kThreadSeedStride + 1);
     }
     threads.reserve(thread_cnt);
 }
@@ -782,11 +783,11 @@ int16_t MCTSThreads::get_best_move(int time_limit_ms){
     if (opp_passed) {
         if (best_stone_id == -1 || max_vis == 0) return -1;
         // Case 1: Ahead after opponent passed -> pass to end the game and win
-        if (cnt_vis_pass > 0 && pass_wr > 0.50) {
+        if (cnt_vis_pass > 0 && pass_wr > kPassAfterOppPassWinrate) {
             return -1;
         }
         // Case 2: Hopelessly behind (<15% winrate) or no stone move beats passing -> pass cleanly
-        if (best_stone_wr < 0.15 || (cnt_vis_pass > 0 && best_stone_wr <= pass_wr + 0.03)) {
+        if (best_stone_wr < kHopelessPositionWinrate || (cnt_vis_pass > 0 && best_stone_wr <= pass_wr + kPassWinrateMargin)) {
             return -1;
         }
         return best_stone_id;
@@ -794,6 +795,6 @@ int16_t MCTSThreads::get_best_move(int time_limit_ms){
 
     // Normal turn (opponent did not pass): only pass if no stone moves exist or Pass clearly dominates
     if (best_stone_id == -1 || max_vis == 0) return -1;
-    if (cnt_vis_pass > max_vis && pass_wr > 0.85) return -1;
+    if (cnt_vis_pass > max_vis && pass_wr > kNormalTurnPassWinrate) return -1;
     return best_stone_id;
 }
