@@ -471,24 +471,49 @@ bool Board::is_eye(int16_t id, Color color) {
     int r = id / board_size, c = id % board_size;
 
     State my_state = ColortoState(color);
+    State opp_state = ColortoState(invertColor(color));
 
+    int16_t first_root = -1;
+    bool same_root = true;
+
+    // Case 1: Check all orthogonal neighbors are friendly and not in 1-liberty atari.
+    // Also track whether they all belong to the exact same connected DSU chain.
     for (int i = 0; i < 4; ++i) {
         int nr = r + dr[i], nc = c + dc[i];
         if (nr < 0 || nr >= board_size || nc < 0 || nc >= board_size) continue;
-        int nid = nr * board_size + nc;
+        int16_t nid = static_cast<int16_t>(nr * board_size + nc);
         if (board[nid] != my_state) return false;
-        if (liberty_tracker.count_liberty(nid) <= 1) return false;
+        int16_t root = static_cast<int16_t>(liberty_tracker.get(nid));
+        if (first_root == -1) {
+            first_root = root;
+            if (liberty_tracker.count_liberty(root) <= 1) return false;
+        } else if (root != first_root) {
+            same_root = false;
+            if (liberty_tracker.count_liberty(root) <= 1) return false;
+        }
     }
 
-    int valid = 0, friendly = 0;
+    // Case 2: Single connected chain surrounds `id` -> already connected outside, so opponent
+    // diagonal stones can never force a false-eye cut; guaranteed true eye.
+    if (same_root && first_root != -1) return true;
+
+    // Case 3: Multiple distinct friendly chains meet at `id` -> check diagonals for a false eye.
+    int valid = 0, friendly = 0, opp_diag = 0;
     for (int i = 0; i < 4; ++i) {
         int nr = r + drd[i], nc = c + dcd[i];
         if (nr < 0 || nr >= board_size || nc < 0 || nc >= board_size) continue;
         valid += 1;
-        if (board[nr * board_size + nc] == my_state) friendly += 1;
+        State s = board[nr * board_size + nc];
+        if (s == my_state) friendly += 1;
+        else if (s == opp_state) opp_diag += 1;
     }
 
-    return (valid == 4) ? (friendly >= 3) : (friendly == valid);
+    // Center (4 diagonals): false eye if >=2 opponent diagonals or 0 friendly diagonals.
+    // Edge/corner (<4 diagonals): false eye if >=1 opponent diagonal or 0 friendly diagonals.
+    if (valid == 4) {
+        return opp_diag <= 1 && friendly >= 1;
+    }
+    return opp_diag == 0 && friendly >= 1;
 }
 
 void Board::getReasonablePts(Color color, std::vector<int16_t> &out) {

@@ -11,6 +11,7 @@ MCTSNode* MCTSNode::select_best_child(double c_puct) const{
     MCTSNode* best_child = nullptr;
     double best_score = -1e9;
 
+    // First Play Urgency (FPU): unvisited children start slightly below parent's expected winrate
     double fpu_reduction = 0.25;
     double parent_q = (this->visits > 0) 
         ? std::max(0.0, (1.0 - (this->wins / this->visits)) - fpu_reduction) 
@@ -19,7 +20,6 @@ MCTSNode* MCTSNode::select_best_child(double c_puct) const{
 
     for (const std::unique_ptr<MCTSNode>& child : children){
         double q = (child->visits > 0) ? (child->wins / child->visits) : parent_q;
-
         double u = c_puct * child -> priority * (sqrt_parent_visits / (1.0 + child->visits));
 
         double puct_score = q + u;
@@ -33,22 +33,25 @@ MCTSNode* MCTSNode::select_best_child(double c_puct) const{
 }
 
 double MCTSInstance::score_candidate_move(int16_t id, Color player) {
+    // Never prioritize filling our own true eye
     if (board.is_eye(id, player)) return 0.001;
     int r = id / board.get_size(), c = id % board.get_size();
     auto [h3, h5] = serialize_patterns(board, r, c, player);
 
+    // Base score from 3x3 and 5x5 pro/master pattern frequencies (only if stones exist nearby)
     double s3 = pattern3x3_has_stone(h3) ? std::log1p(static_cast<double>(global_p3[h3])) : 0.0;
     double s5 = pattern5x5_has_stone(h5) ? std::log1p(static_cast<double>(global_p5[h5])) : 0.0;
     double move_score = 1.0 + s3 + 3.0 * s5;
 
-    // Tactical bonuses for saving our own groups or capturing/pressuring opponent groups
-    int save_sz = 0, cap_sz = 0, atari_sz = 0;
+    // Scan the 4 orthogonal neighbors to collect tactical context around `id`
+    int save_sz = 0, defend_2lib_sz = 0, cap_sz = 0, atari_sz = 0;
     int empty_neighbors = 0, max_friendly_libs = 0, friendly_gsz_sum = 0;
+    int min_opp_libs = 999, opp_group_cnt = 0;
     int16_t empty_ids[4]{};
-    Color opp = invertColor(player);
 
     SmallVec4 distinct_groups;
     SmallVec4 friendly_roots;
+    SmallVec4 cap_roots;
 
     for (int i = 0; i < 4; ++i) {
         int nr = r + dr[i], nc = c + dc[i];
@@ -65,76 +68,160 @@ double MCTSInstance::score_candidate_move(int16_t id, Color player) {
             int gsz = board.get_group_size(n_root);
             if (ncol == player) {
                 if (libs > max_friendly_libs) max_friendly_libs = libs;
-                if (libs == 1) save_sz += gsz;
+                if (libs == 1) save_sz += gsz;              // Friendly group in atari (1 lib)
+                else if (libs == 2) defend_2lib_sz += gsz;  // Friendly group in pre-atari (2 libs)
                 friendly_roots.push_back(n_root);
                 friendly_gsz_sum += gsz;
             } else {
-                if (libs == 1) cap_sz += gsz;
-                else if (libs == 2) atari_sz += gsz;
+                opp_group_cnt++;
+                if (libs < min_opp_libs) min_opp_libs = libs;
+                if (libs == 1) {
+                    cap_sz += gsz;                          // Opponent group we immediately capture
+                    cap_roots.push_back(n_root);
+                } else if (libs == 2) {
+                    atari_sz += gsz;                        // Opponent group we put into atari
+                }
             }
             distinct_groups.push_back(n_root);
         }
     }
 
-    if (empty_neighbors >= 2 || max_friendly_libs >= 3) {
-        // Guaranteed new_libs >= 2 without placing/undoing
-        if (cap_sz > 0) move_score += 20.0 * cap_sz;
-        if (save_sz > 0) move_score += 22.0 * save_sz;
-        if (atari_sz > 0) move_score += 5.0 * atari_sz;
-    } else {
-        int new_libs = 0;
-        int new_gsz = 0;
-        bool have_result = false;
+    // Counter-capture check: if capturing an opponent group (`cap_roots`) also rescues
+    // nearby friendly 1-liberty groups not directly adjacent to `id`, count them in `save_sz`.
+    if (cap_roots.sz > 0) {
+        State my_state = ColortoState(player);
+        int bsz = board.get_size();
+        int16_t extra_saved[16]{};
+        int extra_saved_cnt = 0;
+        for (int ci = 0; ci < cap_roots.sz; ++ci) {
+            int16_t start = cap_roots.data[ci];
+            int16_t curr = start;
+            int chain_steps = 0;
+            do {
+                int sr = curr / bsz, sc = curr % bsz;
+                for (int d = 0; d < 4; ++d) {
+                    int nr = sr + dr[d], nc = sc + dc[d];
+                    if (board.get_cell(nr, nc) != my_state) continue;
+                    int16_t f_root = board.get_root(nr, nc);
+                    if (board.count_lib(f_root) == 1 && friendly_roots.find(f_root) == -1) {
+                        bool seen = false;
+                        for (int k = 0; k < extra_saved_cnt; ++k) {
+                            if (extra_saved[k] == f_root) {
+                                seen = true;
+                                break;
+                            }
+                        }
+                        if (!seen) {
+                            save_sz += board.get_group_size(f_root);
+                            if (extra_saved_cnt < 16) extra_saved[extra_saved_cnt++] = f_root;
+                        }
+                    }
+                }
+                curr = board.get_next_stone(curr);
+            } while (curr != start && ++chain_steps < 16);
+        }
+    }
 
-        if (cap_sz == 0) {
-            if (friendly_roots.sz == 0) {
-                new_libs = empty_neighbors;
-                new_gsz = 1;
-            } else {
-                std::bitset<CELL_CNT> merged_libs = board.get_liberties(friendly_roots.data[0]);
-                for (int i = 1; i < friendly_roots.sz; ++i) {
-                    merged_libs |= board.get_liberties(friendly_roots.data[i]);
-                }
-                for (int i = 0; i < empty_neighbors; ++i) {
-                    merged_libs.set(empty_ids[i]);
-                }
-                merged_libs.reset(id);
-                new_libs = static_cast<int>(merged_libs.count());
-                new_gsz = 1 + friendly_gsz_sum;
-            }
-            have_result = true;
+    // Compute exact post-move liberties (`new_libs`) and merged group size (`new_gsz`)
+    int new_libs = 0;
+    int new_gsz = 0;
+    bool have_result = false;
+
+    if (cap_sz == 0) {
+        if (friendly_roots.sz == 0) {
+            // Isolated stone: liberties = empty neighbors
+            new_libs = empty_neighbors;
+            new_gsz = 1;
+        } else if (friendly_roots.sz == 1 && empty_neighbors == 0) {
+            // Extending a single group with no new empty neighbors loses 1 liberty (occupied by `id`)
+            new_libs = max_friendly_libs - 1;
+            new_gsz = 1 + friendly_gsz_sum;
         } else {
-            MoveState sim = board.place(id, player);
-            if (sim.status == MoveStatus::Success) {
-                new_libs = board.count_lib(id);
-                new_gsz = board.get_group_size(id);
-                board.undo(*sim.undo_state);
-                have_result = true;
+            // Union liberties of all merged friendly groups + new empty neighbors, minus `id` itself
+            std::bitset<CELL_CNT> merged_libs = board.get_liberties(friendly_roots.data[0]);
+            for (int i = 1; i < friendly_roots.sz; ++i) {
+                merged_libs |= board.get_liberties(friendly_roots.data[i]);
             }
+            for (int i = 0; i < empty_neighbors; ++i) {
+                merged_libs.set(empty_ids[i]);
+            }
+            merged_libs.reset(id);
+            new_libs = static_cast<int>(merged_libs.count());
+            new_gsz = 1 + friendly_gsz_sum;
+        }
+        have_result = true;
+    } else if (empty_neighbors >= 2 || max_friendly_libs >= 3) {
+        // Capturing >=1 opponent stone while having >=2 empty neighbors or a >=3-lib ally guarantees >=3 libs
+        new_libs = 3;
+        new_gsz = 1 + friendly_gsz_sum;
+        have_result = true;
+    } else {
+        // Capturing in tight quarters: simulate place+undo to get exact liberties after removals
+        MoveState sim = board.place(id, player);
+        if (sim.status == MoveStatus::Success) {
+            new_libs = board.count_lib(id);
+            new_gsz = board.get_group_size(id);
+            board.undo(*sim.undo_state);
+            have_result = true;
+        }
+    }
+
+    if (have_result) {
+        bool apply_bonuses = false;
+        if (new_libs == 1 && cap_sz < new_gsz) {
+            // Case A: Self-atari or losing snapback (1 liberty left and fewer stones captured than risked)
+            if (new_gsz >= 2) {
+                // Multi-stone self-atari: almost always a blunder
+                move_score *= 0.01;
+            } else {
+                // Single-stone self-atari (`cap_sz == 0`): only mildly viable if throwing in to put opp in atari
+                move_score *= (atari_sz > 0) ? 0.15 : 0.02;
+            }
+        } else if (cap_sz == 0 && new_libs >= 2) {
+            // Case B: Non-capturing safe move (`new_libs >= 2`), check for self-liberty tightening
+            if (new_libs == 2 && max_friendly_libs >= 3 &&
+                (save_sz == 0 || (friendly_gsz_sum - save_sz) >= save_sz)) {
+                // Avoid dragging a >=3-liberty group down to 2 liberties (unless rescuing a bigger atari group)
+                move_score *= 0.05;
+            } else if (friendly_roots.sz == 1 && empty_neighbors == 0 &&
+                       save_sz == 0 && atari_sz == 0) {
+                // Playing on an internal/adjacent point of a single friendly group with no new empty libs:
+                if (opp_group_cnt == 0) {
+                    // Purely filling our own group's liberties without touching any opponent stone
+                    move_score *= 0.02;
+                } else if (new_libs < min_opp_libs - 1) {
+                    // Filling a shared liberty when we already have fewer liberties than the opponent
+                    move_score *= 0.25;
+                } else {
+                    apply_bonuses = true;
+                }
+            } else {
+                apply_bonuses = true;
+            }
+        } else {
+            // Case C: Safe capture, Ko capture (`cap_sz == 1, new_gsz == 1`), or net-positive capture
+            apply_bonuses = true;
         }
 
-        if (have_result) {
-            if (new_libs == 1 && cap_sz < new_gsz) {
-                // Self-atari (or snapback losing more stones than captured): heavily penalize
-                move_score = (new_gsz >= 2) ? move_score*0.02 : move_score;
-            } else {
-                // Safe move, Ko capture (cap_sz == 1, new_gsz == 1), or net-positive capture
-                if (cap_sz > 0) move_score += 20.0 * cap_sz;
-                if (new_libs > 1) {
-                    if (save_sz > 0) move_score += 22.0 * save_sz;
-                    if (atari_sz > 0) move_score += 5.0 * atari_sz;
-                }
+        if (apply_bonuses) {
+            if (cap_sz > 0) move_score += 20.0 * cap_sz;
+            if (new_libs >= 2) {
+                if (save_sz > 0) move_score += (new_libs >= 3 ? 22.0 : 12.0) * save_sz;
+                if (defend_2lib_sz > 0 && new_libs >= 3) move_score += 6.0 * defend_2lib_sz;
+                if (friendly_roots.sz >= 2 && new_libs >= 3) move_score += 2.5 * friendly_gsz_sum; // Connecting >=2 groups safely
+                if (atari_sz > 0) move_score += (new_libs >= 3 ? 5.0 : 2.5) * atari_sz;
             }
         }
     }
 
+    // Opening & early-midgame positional geometry (only when move has no local tactical urgency)
     int sz = board.get_size();
     int total_stones = board.get_white_cnt() + board.get_black_cnt();
     int opening_limit = std::max(8, board.get_cell_cnt() / 12); // 8 (9x9), 14 (13x13), 30 (19x19)
     int strategic_limit = board.get_cell_cnt() / 3;            // 27 (9x9), 56 (13x13), 120 (19x19)
     bool local_stone = pattern5x5_has_stone(h5);
 
-    if (save_sz == 0 && cap_sz == 0 && atari_sz == 0 && total_stones < strategic_limit) {
+    if (save_sz == 0 && cap_sz == 0 && atari_sz == 0 && defend_2lib_sz == 0 && total_stones < strategic_limit) {
         int dist_r = std::min(r, sz - 1 - r);
         int dist_c = std::min(c, sz - 1 - c);
         int line = std::min(dist_r, dist_c);
@@ -145,19 +232,27 @@ double MCTSInstance::score_candidate_move(int16_t id, Color player) {
             bool is_tengen = (r == sz / 2 && c == sz / 2 && (sz % 2 == 1));
 
             if (line == 0) {
+                // Opening: strongly avoid 1st-line edge moves
                 move_score *= 0.1;
             } else if (line == 1) {
+                // Opening: discourage 2nd-line moves unless anchored by a nearby stone
                 move_score *= local_stone ? 0.6 : 0.35;
             } else if (line == 2 || line == 3) {
+                // Opening: favor 3rd/4th-line corner enclosures and side points
                 move_score *= (other <= corner_max) ? 2.5 : 1.6;
             } else if (is_tengen) {
                 move_score *= (sz <= 9) ? 1.8 : (sz <= 13 ? 1.2 : 1.0);
             } else if (!local_stone) {
                 move_score *= 0.6; // Discourage unmotivated floating 5th+ line moves on 13x13/19x19
             }
-        } else if (!local_stone && (line == 2 || line == 3)) {
-            // Keep open 3rd/4th-line corners & extensions competitive past opening_limit
-            move_score *= (other <= corner_max) ? 2.0 : 1.4;
+        } else {
+            if (line == 0 && friendly_roots.sz < 2) {
+                // Early-midgame: still discourage non-connecting 1st-line crawls
+                move_score *= local_stone ? 0.35 : 0.15;
+            } else if (!local_stone && (line == 2 || line == 3)) {
+                // Keep open 3rd/4th-line corners & extensions competitive past opening_limit
+                move_score *= (other <= corner_max) ? 2.0 : 1.4;
+            }
         }
     }
 
@@ -184,6 +279,7 @@ MCTSNode* MCTSInstance::selectChild(){
 
     int select_depth = 0;
     while (!curr->is_terminal() && curr->moves_generated && select_depth < 300){
+        // Progressive widening: unlock more unexpanded moves as `curr->visits` grows
         if (!curr->unexpanded.empty()){
             int new_child_cnt = curr->max_child_org + static_cast<int>(0.5 * std::sqrt(curr->visits));
             if (curr->max_child_cnt < new_child_cnt){
@@ -240,7 +336,9 @@ MCTSNode* MCTSInstance::selectChild(){
         // Ascending order so best moves sit at .back() for O(1) pop_back()
         std::sort(curr->unexpanded.begin(), curr->unexpanded.end(), std::less<ScoredCandidate>());
 
-        double pass_score = (curr->type == MoveType::Pass) ? 16.0 : 0.01;
+        // Give Pass a strong prior only if opponent passed at the root or no board moves exist;
+        // mid-tree pass nodes stay low-priority so MCTS doesn't assume the opponent will pass back.
+        double pass_score = ((curr == root.get() && curr->type == MoveType::Pass) || curr->unexpanded.empty()) ? 16.0 : 0.01;
         curr->total_child_score += pass_score;
 
         int init_cnt = std::min(curr->max_child_cnt, static_cast<int>(curr->unexpanded.size()));
@@ -277,10 +375,28 @@ MCTSNode* MCTSInstance::selectChild(){
 }
 
 bool MCTSInstance::is_bad_self_atari(int16_t cid, const UndoState& u) {
+    int16_t only_lib = board.get_only_lib(cid);
+    if (only_lib == -1) return false; // Group has >=2 liberties -> safe
     int gsz = board.get_group_size(cid);
-    return gsz >= 2 &&
-           board.get_only_lib(cid) != -1 &&
-           static_cast<int>(u.captured.size()) < gsz;
+    int cap_cnt = static_cast<int>(u.captured.size());
+    if (cap_cnt >= gsz) return false; // Net-positive capture or valid Ko capture
+    if (gsz >= 2) return true;        // Multi-stone self-atari losing more stones than captured
+
+    // Single-stone self-atari capturing nothing: only allow as a throw-in if it puts
+    // an adjacent >=2-stone opponent group into 1-liberty atari.
+    int sz = board.get_size();
+    int r = cid / sz, c = cid % sz;
+    for (int i = 0; i < 4; ++i) {
+        int nr = r + dr[i], nc = c + dc[i];
+        if (nr < 0 || nr >= sz || nc < 0 || nc >= sz) continue;
+        int16_t nid = board.get(nr, nc);
+        if (nid != only_lib &&
+            board.get_only_lib(nid) != -1 &&
+            board.get_group_size(nid) >= 2) {
+            return false;
+        }
+    }
+    return true;
 }
 
 int16_t MCTSInstance::play_rand_move(Color color) {
@@ -344,6 +460,7 @@ double MCTSInstance::rollout(MCTSNode *node){
     while (consec_pass < 2 && steps < max_steps){
         bool is_special_case = false;
         if (prev_move != -1){
+            // Rollout heuristic 1: if the last move left itself in 1-liberty atari, capture it
             int16_t pos_lib = board.get_only_lib(prev_move);
             if (pos_lib != -1 && !board.is_eye(pos_lib, curr_turn)){
                 MoveState tmp = board.place(pos_lib, curr_turn);
@@ -358,10 +475,13 @@ double MCTSInstance::rollout(MCTSNode *node){
                     }
                 }
             }
+            // Rollout heuristic 2: check orthogonal neighbors of `prev_move` for friendly or
+            // opponent groups in atari; save our largest group (or counter-capture) vs capture theirs.
             if (!is_special_case){
                 int r = prev_move/board.get_size(), c = prev_move%board.get_size();
                 int best_opp_sz = -1; int16_t best_opp_id = -1;
                 int best_fr_sz = -1; int16_t best_fr_id = -1;
+                int16_t best_fr_stone = -1;
                 for (int i = 0; i < 4; ++i){
                     int nr = r + dr[i], nc = c + dc[i];
                     if (nr < 0 || nr >= board.get_size() || nc < 0 || nc >= board.get_size()) continue;
@@ -375,59 +495,71 @@ double MCTSInstance::rollout(MCTSNode *node){
                     if (*neighbor_color == curr_turn && libpos != -1 && best_fr_sz < group_sz){
                         best_fr_sz = group_sz;
                         best_fr_id = libpos;
+                        best_fr_stone = nid;
                     }else if (*neighbor_color == invertColor(curr_turn) && libpos != -1 && best_opp_sz < group_sz){
                         best_opp_sz = group_sz;
                         best_opp_id = libpos;
                     }
                 }
 
+                auto try_play_tactical = [&](int16_t move_id) -> bool {
+                    if (move_id == -1 || board.is_eye(move_id, curr_turn)) return false;
+                    MoveState tmp = board.place(move_id, curr_turn);
+                    if (tmp.status != MoveStatus::Success) return false;
+                    if (is_bad_self_atari(move_id, *tmp.undo_state)) {
+                        board.undo(*tmp.undo_state);
+                        return false;
+                    }
+                    undo_stack.push_back(std::move(*tmp.undo_state));
+                    prev_move = move_id;
+                    is_special_case = true;
+                    consec_pass = 0;
+                    return true;
+                };
+
+                auto try_save_or_counter_capture = [&]() -> bool {
+                    if (best_fr_sz == -1) return false;
+                    if (try_play_tactical(best_fr_id)) return true;
+
+                    // Extending failed or is self-atari; check adjacent opponent groups in atari for counter-capture
+                    State opp_state = ColortoState(invertColor(curr_turn));
+                    int sz = board.get_size();
+                    int16_t curr = best_fr_stone;
+                    int chain_steps = 0;
+                    do {
+                        int sr = curr / sz, sc = curr % sz;
+                        for (int d = 0; d < 4; ++d) {
+                            int nr = sr + dr[d], nc = sc + dc[d];
+                            if (board.get_cell(nr, nc) != opp_state) continue;
+                            int16_t opp_id = board.get(nr, nc);
+                            int16_t cap_lib = board.get_only_lib(opp_id);
+                            if (cap_lib != -1 && try_play_tactical(cap_lib)) {
+                                return true;
+                            }
+                        }
+                        curr = board.get_next_stone(curr);
+                    } while (curr != best_fr_stone && ++chain_steps < 12);
+                    return false;
+                };
+
                 bool prioritize_saving = (best_fr_sz > best_opp_sz);
 
-                if (prioritize_saving && best_fr_sz != -1 && !board.is_eye(best_fr_id, curr_turn)) {
-                    MoveState tmp = board.place(best_fr_id, curr_turn);
-                    if (tmp.status == MoveStatus::Success) {
-                        if (is_bad_self_atari(best_fr_id, *tmp.undo_state)) {
-                            board.undo(*tmp.undo_state); // Still atari
-                        } else {
-                            undo_stack.push_back(std::move(*tmp.undo_state));
-                            prev_move = best_fr_id;
-                            is_special_case = true;
-                            consec_pass = 0;
-                        }
-                    }
+                if (prioritize_saving) {
+                    try_save_or_counter_capture();
                 }
 
-                if (!is_special_case && best_opp_sz != -1 && !board.is_eye(best_opp_id, curr_turn)) {
-                    MoveState tmp = board.place(best_opp_id, curr_turn);
-                    if (tmp.status == MoveStatus::Success) {
-                        if (is_bad_self_atari(best_opp_id, *tmp.undo_state)) {
-                            board.undo(*tmp.undo_state);
-                        } else {
-                            undo_stack.push_back(std::move(*tmp.undo_state));
-                            prev_move = best_opp_id;
-                            is_special_case = true;
-                            consec_pass = 0;
-                        }
-                    }
+                if (!is_special_case && best_opp_sz != -1) {
+                    try_play_tactical(best_opp_id);
                 }
 
-                // Fallback to saving if capturing wasn't possible or friendly was smaller
-                if (!is_special_case && !prioritize_saving && best_fr_sz != -1 && !board.is_eye(best_fr_id, curr_turn)) {
-                    MoveState tmp = board.place(best_fr_id, curr_turn);
-                    if (tmp.status == MoveStatus::Success) {
-                        if (is_bad_self_atari(best_fr_id, *tmp.undo_state)) {
-                            board.undo(*tmp.undo_state);
-                        } else {
-                            undo_stack.push_back(std::move(*tmp.undo_state));
-                            prev_move = best_fr_id;
-                            is_special_case = true;
-                            consec_pass = 0;
-                        }
-                    }
+                // Fallback to saving or counter-capturing if capturing wasn't possible or friendly was smaller
+                if (!is_special_case && !prioritize_saving) {
+                    try_save_or_counter_capture();
                 }
             }
         }
 
+        // Rollout heuristic 3: 2/3 chance to pick a 3x3 pattern-weighted neighbor of `prev_move`
         if (!is_special_case && prev_move != -1 && board.rand_below(3) != 0) {
             int r = prev_move / board.get_size(), c = prev_move % board.get_size();
             int16_t cands[8];
@@ -483,6 +615,7 @@ double MCTSInstance::rollout(MCTSNode *node){
             }
         }
 
+        // Rollout fallback: uniform random legal non-eye, non-self-atari move
         if (!is_special_case){
             int16_t id = play_rand_move(curr_turn);
             if (id == -1) {consec_pass++; prev_move = -1;}
@@ -504,9 +637,11 @@ void MCTSInstance::backprop(MCTSNode *node, double score){
     while (node != nullptr){
         node -> visits++;
 
+        // `score` is (White - Black + komi); flip sign so `margin > 0` means `node->prev_player` won
         double margin = (node -> prev_player == Color::White) ? score : -score;
         double win = (margin > 0.0) ? 1.0 : 0.0;
         double bonus = 0.5 + 0.5 * std::tanh(margin / scale);
+        // 85% binary win/loss + 15% smooth score margin to break ties in clearly won/lost games
         node -> wins += 0.85 * win + 0.15 * bonus;
 
         node = node -> parent;
@@ -640,15 +775,25 @@ int16_t MCTSThreads::get_best_move(int time_limit_ms){
     int max_vis = *max_it;
     int16_t best_stone_id = (max_vis > 0) ? static_cast<int16_t>(max_it - total_vis.begin()) : -1;
 
+    double pass_wr = (cnt_vis_pass > 0) ? (wins_pass / cnt_vis_pass) : 0.0;
+    double best_stone_wr = (best_stone_id != -1 && max_vis > 0) ? (total_wins[best_stone_id] / max_vis) : 0.0;
+
     bool opp_passed = (instances[0].get_root() && instances[0].get_root()->type == MoveType::Pass);
     if (opp_passed) {
-        if (cnt_vis_pass > 0 && (wins_pass / cnt_vis_pass) > 0.55) {
-            return -1; // Ahead: pass to win!
+        if (best_stone_id == -1 || max_vis == 0) return -1;
+        // Case 1: Ahead after opponent passed -> pass to end the game and win
+        if (cnt_vis_pass > 0 && pass_wr > 0.50) {
+            return -1;
         }
-        // Behind: do not pass if there is any viable stone move!
-        return (best_stone_id != -1) ? best_stone_id : -1;
+        // Case 2: Hopelessly behind (<15% winrate) or no stone move beats passing -> pass cleanly
+        if (best_stone_wr < 0.15 || (cnt_vis_pass > 0 && best_stone_wr <= pass_wr + 0.03)) {
+            return -1;
+        }
+        return best_stone_id;
     }
 
-    if (max_vis == 0) return -1;
-    return (max_vis >= cnt_vis_pass) ? best_stone_id : -1;
+    // Normal turn (opponent did not pass): only pass if no stone moves exist or Pass clearly dominates
+    if (best_stone_id == -1 || max_vis == 0) return -1;
+    if (cnt_vis_pass > max_vis && pass_wr > 0.85) return -1;
+    return best_stone_id;
 }

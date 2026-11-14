@@ -189,6 +189,8 @@ public:
     const int get_group_size(int16_t u) const {return cmp_size[get(u)];}
 
     const std::bitset<CELL_CNT>& get_liberties(int16_t u) const { return liberties[get(u)]; }
+
+    int16_t get_next_stone(int16_t u) const { return next_stone[u]; }
 };
 
 enum class MoveType : int8_t{Place, Pass, Resign, Setup, DEFAULT};
@@ -414,6 +416,8 @@ public:
     const std::bitset<CELL_CNT>& get_liberties(int16_t u) const { return liberty_tracker.get_liberties(u); }
 
     int get_group_size(int16_t u){return liberty_tracker.get_group_size(u);}
+
+    int16_t get_next_stone(int16_t u) const { return liberty_tracker.get_next_stone(u); }
 
     int16_t get_root(int id){return liberty_tracker.get(id);}
     int16_t get_root(int r, int c) {return get_root(get(r, c));}
