@@ -398,7 +398,7 @@ public:
 
     inline State get_cell_unchecked(int id) const { return board[id]; }
 
-    inline bool is_empty_cell(int r, int c){
+    inline bool is_empty_cell(int r, int c) const {
         return get_cell(r, c) == State::Empty;
     }
     // AI-assisted: see AI12
@@ -407,21 +407,23 @@ public:
     // AI-assisted: see AI08
     double calculate_score() const;
 
-    int get_cell_cnt(){return cell_cnt;}
+    int get_cell_cnt() const {return cell_cnt;}
 
-    int16_t get_only_lib(int16_t u){ return liberty_tracker.get_single_liberty(u);}
+    const Hash& get_hash() const { return curr_hash; }
+
+    int16_t get_only_lib(int16_t u) const { return liberty_tracker.get_single_liberty(u);}
 
     int count_lib(int16_t u) const { return liberty_tracker.count_liberty(u); }
 
     const std::bitset<CELL_CNT>& get_liberties(int16_t u) const { return liberty_tracker.get_liberties(u); }
 
-    int get_group_size(int16_t u){return liberty_tracker.get_group_size(u);}
+    int get_group_size(int16_t u) const {return liberty_tracker.get_group_size(u);}
 
     int16_t get_next_stone(int16_t u) const { return liberty_tracker.get_next_stone(u); }
 
-    int16_t get_root(int id){return liberty_tracker.get(id);}
-    int16_t get_root(int r, int c) {return get_root(get(r, c));}
-    int16_t get_root(Point point) {return get_root(get(point));}
+    int16_t get_root(int id) const {return liberty_tracker.get(id);}
+    int16_t get_root(int r, int c) const {return get_root(get(r, c));}
+    int16_t get_root(Point point) const {return get_root(get(point));}
 };
 
 // AI-assisted: see AI05

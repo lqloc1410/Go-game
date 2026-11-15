@@ -182,10 +182,102 @@ static std::vector<Point> get_fixed_handicap_points(int sz, int count) {
     return pts;
 }
 
+class GTPTimeManager {
+private:
+    static constexpr int kMinMoveTimeMs = 100;
+    static constexpr int kMaxMoveTimeMs = 10000;
+    static constexpr int kLagBufferMs = 400;
+
+    int default_ms = 1000;
+    bool has_settings = false;
+    int main_time_sec = 0;
+    int byo_time_sec = 0;
+    int byo_stones = 0;
+    int time_left_sec[2] = {-1, -1};
+    int stones_left[2] = {0, 0};
+
+    static int color_idx(Color c) { return (c == Color::Black) ? 0 : 1; }
+
+public:
+    explicit GTPTimeManager(int def_ms) : default_ms(std::max(kMinMoveTimeMs, def_ms)) {}
+
+    void reset_clocks() {
+        time_left_sec[0] = time_left_sec[1] = -1;
+        stones_left[0] = stones_left[1] = 0;
+    }
+
+    void set_time_settings(int main_s, int byo_s, int stones) {
+        has_settings = true;
+        main_time_sec = std::max(0, main_s);
+        byo_time_sec = std::max(0, byo_s);
+        byo_stones = std::max(0, stones);
+        reset_clocks();
+    }
+
+    void set_time_left(Color c, int time_s, int stones) {
+        int idx = color_idx(c);
+        time_left_sec[idx] = std::max(0, time_s);
+        stones_left[idx] = std::max(0, stones);
+    }
+
+    int allocate_ms(const Game& game, Color c) const {
+        int idx = color_idx(c);
+        if (!has_settings && time_left_sec[idx] < 0) {
+            return default_ms;
+        }
+
+        int rem_sec = 0;
+        int rem_stones = 0;
+        if (time_left_sec[idx] >= 0) {
+            rem_sec = time_left_sec[idx];
+            rem_stones = stones_left[idx];
+        } else if (main_time_sec > 0) {
+            rem_sec = main_time_sec;
+            rem_stones = 0;
+        } else {
+            rem_sec = byo_time_sec;
+            rem_stones = byo_stones;
+        }
+
+        if (rem_sec <= 0) return kMinMoveTimeMs;
+
+        int available_ms = std::max(kMinMoveTimeMs, rem_sec * 1000 - kLagBufferMs);
+        int max_allowed_ms = std::min(kMaxMoveTimeMs, available_ms);
+
+        if (rem_stones > 0) {
+            int budget = available_ms / rem_stones;
+            if (rem_stones == 1 && rem_sec <= 2) {
+                budget = std::min(budget, std::max(kMinMoveTimeMs, rem_sec * 600));
+            }
+            return std::clamp(budget, kMinMoveTimeMs, max_allowed_ms);
+        }
+
+        // Main time or Fischer time (rem_stones == 0)
+        int cells = game.get_size() * game.get_size();
+        int expected_my_moves = std::max(12, cells / 3);
+        int my_moves_played = static_cast<int>(game.get_history().get_history().size()) / 2;
+        int rem_moves = std::clamp(expected_my_moves - my_moves_played, 8, expected_my_moves);
+
+        int budget = available_ms / rem_moves;
+        if (has_settings && byo_time_sec > 0 && byo_stones <= 1) {
+            int inc_bonus = static_cast<int>(byo_time_sec * 650);
+            int single_move_cap = std::max(kMinMoveTimeMs, available_ms / 4);
+            budget = std::min(budget + inc_bonus, single_move_cap);
+        }
+
+        // Save extra clock on very first move if plenty of main time remains
+        if (game.get_history().get_history().size() < 2 && rem_sec > 15) {
+            budget = std::min(budget, 2500);
+        }
+
+        return std::clamp(budget, kMinMoveTimeMs, max_allowed_ms);
+    }
+};
+
 static void run_gtp(Game& game, int default_time_ms = 1000) {
     int current_board_size = game.get_size();
     double current_komi = game.get_komi();
-    int ai_time_ms = default_time_ms;
+    GTPTimeManager time_mgr(default_time_ms);
 
     const std::vector<std::string> supported_cmds = {
         "protocol_version",
@@ -297,10 +389,12 @@ static void run_gtp(Game& game, int default_time_ms = 1000) {
             current_board_size = *maybe_sz;
             game = Game(current_board_size, current_komi, 0);
             mcts.reset();
+            time_mgr.reset_clocks();
             reply_ok(id_str);
         } else if (cmd_name == "clear_board") {
             game = Game(current_board_size, current_komi, 0);
             mcts.reset();
+            time_mgr.reset_clocks();
             reply_ok(id_str);
         } else if (cmd_name == "komi") {
             std::string km_tok;
@@ -445,10 +539,11 @@ static void run_gtp(Game& game, int default_time_ms = 1000) {
             if (!mcts) {
                 mcts = std::make_unique<MCTSThreads>(game.get_board(), color, prev_type);
             }
-            int16_t best_id = mcts->get_best_move(ai_time_ms);
+            int move_time_ms = time_mgr.allocate_ms(game, color);
+            int16_t best_id = mcts->get_best_move(move_time_ms);
             int rollouts = mcts->get_new_rollouts();
             int total_visits = mcts->get_total_rollouts();
-            int rps = (ai_time_ms > 0) ? static_cast<int>(static_cast<long long>(rollouts) * 1000 / ai_time_ms) : 0;
+            int rps = (move_time_ms > 0) ? static_cast<int>(static_cast<long long>(rollouts) * 1000 / move_time_ms) : 0;
             std::cerr << "info: " << rollouts << " rollouts (" << rps << " rps) | tree visits: " << total_visits << "\n";
             if (best_id == -1) {
                 game.pass(color);
@@ -473,16 +568,36 @@ static void run_gtp(Game& game, int default_time_ms = 1000) {
                 reply_ok(id_str);
             }
         } else if (cmd_name == "time_settings") {
-            int main_time = 0, byo_time = 0, byo_stones = 0;
-            if (iss >> main_time >> byo_time >> byo_stones) {
-                if (byo_time > 0 && byo_stones > 0) {
-                    ai_time_ms = std::clamp((byo_time * 1000) / byo_stones, 100, 10000);
-                } else if (main_time > 0) {
-                    ai_time_ms = std::clamp((main_time * 1000) / 30, 100, 10000);
-                }
+            std::string main_tok, byo_tok, stones_tok;
+            if (!(iss >> main_tok >> byo_tok >> stones_tok)) {
+                reply_err(id_str, "syntax error");
+                continue;
             }
+            auto maybe_main = to_int(main_tok);
+            auto maybe_byo = to_int(byo_tok);
+            auto maybe_stones = to_int(stones_tok);
+            if (!maybe_main.has_value() || !maybe_byo.has_value() || !maybe_stones.has_value() ||
+                *maybe_main < 0 || *maybe_byo < 0 || *maybe_stones < 0) {
+                reply_err(id_str, "syntax error");
+                continue;
+            }
+            time_mgr.set_time_settings(*maybe_main, *maybe_byo, *maybe_stones);
             reply_ok(id_str);
         } else if (cmd_name == "time_left") {
+            std::string col_tok, time_tok, stones_tok;
+            if (!(iss >> col_tok >> time_tok >> stones_tok)) {
+                reply_err(id_str, "syntax error");
+                continue;
+            }
+            Color color;
+            auto maybe_time = to_int(time_tok);
+            auto maybe_stones = to_int(stones_tok);
+            if (!parse_gtp_color(col_tok, color) || !maybe_time.has_value() || !maybe_stones.has_value() ||
+                *maybe_time < 0 || *maybe_stones < 0) {
+                reply_err(id_str, "syntax error");
+                continue;
+            }
+            time_mgr.set_time_left(color, *maybe_time, *maybe_stones);
             reply_ok(id_str);
         } else if (cmd_name == "final_score") {
             if (game.is_game_over() == EndgameStatus::Resignation) {

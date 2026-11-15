@@ -782,12 +782,25 @@ int16_t MCTSThreads::get_best_move(int time_limit_ms){
     bool opp_passed = (instances[0].get_root() && instances[0].get_root()->type == MoveType::Pass);
     if (opp_passed) {
         if (best_stone_id == -1 || max_vis == 0) return -1;
-        // Case 1: Ahead after opponent passed -> pass to end the game and win
-        if (cnt_vis_pass > 0 && pass_wr > kPassAfterOppPassWinrate) {
+        const Board& root_board = instances[0].get_board();
+        const int total_stones = root_board.get_black_cnt() + root_board.get_white_cnt();
+        const bool past_midgame = (total_stones * 2 >= root_board.get_cell_cnt());
+        const int min_pass_visits = std::min(kMinPassVisits, std::max(1, total_rollouts / 4));
+        const bool pass_well_sampled = (cnt_vis_pass >= min_pass_visits);
+
+        // Case 1: Clearly winning even if we pass -> pass cleanly unless a stone move is noticeably better
+        if (pass_well_sampled && pass_wr > kClearlyWinningPassWinrate &&
+            best_stone_wr <= pass_wr + kPassWinrateMargin) {
             return -1;
         }
-        // Case 2: Hopelessly behind (<15% winrate) or no stone move beats passing -> pass cleanly
-        if (best_stone_wr < kHopelessPositionWinrate || (cnt_vis_pass > 0 && best_stone_wr <= pass_wr + kPassWinrateMargin)) {
+        // Case 2: Narrowly ahead or even -> pass only if no stone move improves upon passing
+        if (pass_well_sampled && pass_wr > kPassAfterOppPassWinrate &&
+            best_stone_wr <= pass_wr + kClosePassWinrateMargin) {
+            return -1;
+        }
+        // Case 3: Late-game hopeless position (<15% winrate) -> pass cleanly once board is largely settled
+        if (past_midgame && best_stone_wr < kHopelessPositionWinrate &&
+            (cnt_vis_pass == 0 || best_stone_wr <= pass_wr + kPassWinrateMargin)) {
             return -1;
         }
         return best_stone_id;
@@ -797,4 +810,74 @@ int16_t MCTSThreads::get_best_move(int time_limit_ms){
     if (best_stone_id == -1 || max_vis == 0) return -1;
     if (cnt_vis_pass > max_vis && pass_wr > kNormalTurnPassWinrate) return -1;
     return best_stone_id;
+}
+
+void AIEngine::set_difficulty(AIDifficulty diff) {
+    if (diff == difficulty_) return;
+    difficulty_ = diff;
+    reset();
+}
+
+void AIEngine::reset() {
+    mcts.reset();
+}
+
+bool AIEngine::is_tree_in_sync(const Board& board, Color ai_color, MoveType last_move_type) const {
+    if (!mcts) return false;
+    const Board* tree_board = mcts->get_board();
+    const MCTSNode* root = mcts->get_root();
+    if (!tree_board || !root) return false;
+    return tree_board->get_hash() == board.get_hash() &&
+           root->prev_player == invertColor(ai_color) &&
+           root->type == last_move_type;
+}
+
+int16_t AIEngine::choose_easy_move(const Board& board, Color ai_color, MoveType last_move_type) const {
+    const int total_stones = board.get_black_cnt() + board.get_white_cnt();
+    if (last_move_type == MoveType::Pass && total_stones * 2 >= board.get_cell_cnt()) {
+        return -1;
+    }
+
+    Board tmp = board;
+    std::random_device rd;
+    uint64_t seed = (static_cast<uint64_t>(rd()) << 32) ^ static_cast<uint64_t>(rd());
+    tmp.seed_gen(seed);
+
+    const int n = tmp.get_empty_cnt();
+    std::array<int16_t, CELL_CNT> cands{};
+    tmp.copy_empty_cells(cands.data());
+
+    for (int i = 0; i < n; ++i) {
+        int pick = i + static_cast<int>(tmp.rand_below(static_cast<uint32_t>(n - i)));
+        std::swap(cands[i], cands[pick]);
+        int16_t cid = cands[i];
+        if (tmp.is_legal(cid, ai_color) && !tmp.is_eye(cid, ai_color)) {
+            return cid;
+        }
+    }
+    return -1;
+}
+
+void AIEngine::sync_move(const Board& board, int16_t move_id, MoveType type, Color mover_color) {
+    if (difficulty_ == AIDifficulty::Easy || type == MoveType::Resign) {
+        reset();
+        return;
+    }
+    if (!mcts) return;
+
+    mcts->advance_tree(move_id, type, mover_color);
+    if (!is_tree_in_sync(board, invertColor(mover_color), type)) {
+        reset();
+    }
+}
+
+int16_t AIEngine::choose_move(const Board& board, Color ai_color, MoveType last_move_type) {
+    if (difficulty_ == AIDifficulty::Easy) {
+        return choose_easy_move(board, ai_color, last_move_type);
+    }
+
+    if (!is_tree_in_sync(board, ai_color, last_move_type)) {
+        mcts = std::make_unique<MCTSThreads>(board, ai_color, last_move_type, num_threads(difficulty_));
+    }
+    return mcts->get_best_move(static_cast<int>(difficulty_));
 }

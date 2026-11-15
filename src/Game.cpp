@@ -98,24 +98,49 @@ MoveStatus Game::play_move(int16_t id, Color color) {
 }
 
 bool Game::save() const {
+    return save((save_folder / save_file).string());
+}
+
+bool Game::save(const std::string &filepath) const {
+    if (filepath.empty()) return false;
+
     try {
         std::error_code ec;
-        fs::create_directories(save_folder, ec);
-        if (ec) return false;
+        fs::path target_path(filepath);
+        const fs::path filename = target_path.filename();
+        if (filename.empty() || filename == "." || filename == ".." || fs::is_directory(target_path, ec)) {
+            return false;
+        }
+        ec.clear();
 
-        fs::path target_path = save_folder / save_file;
-        fs::path temp_path = save_folder / tmp_file;
+        if (target_path.has_parent_path()) {
+            fs::create_directories(target_path.parent_path(), ec);
+            if (ec) return false;
+        }
 
-        std::ofstream out(temp_path);
-        if (!out.is_open()) return false;
+        fs::path temp_path = target_path;
+        temp_path += ".tmp";
 
-        out << to_sgf();
-        out.close();
-        if (!out.good()) return false;
+        {
+            std::ofstream out(temp_path);
+            if (!out.is_open()) return false;
+
+            out << to_sgf();
+            out.close();
+            if (!out.good()) {
+                std::error_code cleanup_ec;
+                fs::remove(temp_path, cleanup_ec);
+                return false;
+            }
+        }
 
         // Atomically replace target file
         fs::rename(temp_path, target_path, ec);
-        if (ec) return false;
+        if (ec) {
+            std::error_code cleanup_ec;
+            fs::remove(temp_path, cleanup_ec);
+            return false;
+        }
 
         return true;
     } catch (...) {

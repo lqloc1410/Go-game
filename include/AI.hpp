@@ -88,9 +88,12 @@ namespace AIConstants {
 
     // Multi-threading & pass decision thresholds
     inline constexpr uint32_t kThreadSeedStride = 10007U;
+    inline constexpr int kMinPassVisits = 32;
     inline constexpr double kPassAfterOppPassWinrate = 0.50;
+    inline constexpr double kClearlyWinningPassWinrate = 0.85;
     inline constexpr double kHopelessPositionWinrate = 0.15;
     inline constexpr double kPassWinrateMargin = 0.03;
+    inline constexpr double kClosePassWinrateMargin = 0.005;
     inline constexpr double kNormalTurnPassWinrate = 0.85;
 }
 
@@ -180,8 +183,8 @@ inline std::pair<uint16_t, uint64_t> serialize_patterns(
         }
     }
 
-    uint16_t min3 = 0xFFFFU;
-    uint64_t min5 = 0xFFFFFFFFFFFFFFFFULL;
+    uint16_t min3 = 0xFFFFU; // All 16 bits are set to 1
+    uint64_t min5 = 0xFFFFFFFFFFFFFFFFULL; // All 64 bits are set to 1
 
     for (int k = 0; k < 8; ++k) {
         uint16_t enc3 = 0;
@@ -381,6 +384,7 @@ public:
     const MCTSNode* get_root() const {return root.get();}
     
     Board& get_board(){return board;}
+    const Board& get_board() const {return board;}
 
     void advance_tree(int16_t move_id, MoveType type, Color color);
 };
@@ -400,4 +404,34 @@ public:
     int16_t get_best_move(int time_limit_ms = 1000);
     int get_total_rollouts() const { return total_rollouts; }
     int get_new_rollouts() const { return new_rollouts; }
+    const Board* get_board() const { return instances.empty() ? nullptr : &instances[0].get_board(); }
+    const MCTSNode* get_root() const { return instances.empty() ? nullptr : instances[0].get_root(); }
+};
+
+enum class AIDifficulty : int { Easy = 100, Medium = 500, Hard = 3000 };
+
+class AIEngine {
+private:
+    AIDifficulty difficulty_ = AIDifficulty::Hard;
+    std::unique_ptr<MCTSThreads> mcts = nullptr;
+
+    static unsigned int num_threads(AIDifficulty diff) {
+        if (diff == AIDifficulty::Easy) return 1;
+        if (diff == AIDifficulty::Medium) return 2;
+        return 0; // 0 -> MCTSThreads default (half of hardware threads)
+    }
+
+    bool is_tree_in_sync(const Board& board, Color ai_color, MoveType last_move_type) const;
+    int16_t choose_easy_move(const Board& board, Color ai_color, MoveType last_move_type) const;
+
+public:
+    AIEngine() = default;
+    explicit AIEngine(AIDifficulty difficulty) : difficulty_(difficulty) {}
+
+    void set_difficulty(AIDifficulty diff);
+    AIDifficulty get_difficulty() const { return difficulty_; }
+
+    void reset();
+    void sync_move(const Board& board, int16_t move_id, MoveType type, Color mover_color);
+    int16_t choose_move(const Board& board, Color ai_color, MoveType last_move_type = MoveType::DEFAULT);
 };

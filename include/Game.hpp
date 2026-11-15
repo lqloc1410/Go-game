@@ -62,4 +62,5 @@ public:
     }
 
     bool save() const;
+    bool save(const std::string &filepath) const;
 };
