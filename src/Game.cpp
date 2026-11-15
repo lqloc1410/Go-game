@@ -113,6 +113,14 @@ bool Game::save(const std::string &filepath) const {
         }
         ec.clear();
 
+        if (!target_path.has_extension()) {
+            target_path += ".sgf";
+            if (fs::is_directory(target_path, ec)) {
+                return false;
+            }
+            ec.clear();
+        }
+
         if (target_path.has_parent_path()) {
             fs::create_directories(target_path.parent_path(), ec);
             if (ec) return false;
