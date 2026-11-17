@@ -41,6 +41,11 @@ public:
     int  blackStones() const   { return game_.get_black_cnt(); }
     int  whiteStones() const   { return game_.get_white_cnt(); }
     double score() const { return game_.calculate_score(); } // > 0: Trắng hơn, < 0: Đen hơn
+    bool toggleDeadGroup(int x, int y) { return game_.toggle_dead_group(y, x); }
+    bool isDeadStone(int x, int y) const { return game_.is_dead_stone(y, x); }
+    bool hasDeadStones() const { return game_.has_dead_stones(); }
+    void clearDeadStones() { game_.clear_dead_stones(); }
+    void autoMarkDeadStones(int rollout_cnt = 300) { game_.auto_mark_dead_stones(rollout_cnt); }
 
     bool save() const{return game_.save();}
     bool save(const std::string& path) const { return game_.save(path); }

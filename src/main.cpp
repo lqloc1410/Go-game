@@ -45,7 +45,7 @@ static void print_help() {
 }
 
 static void print_score(const Game& game) {
-    double score = game.calculate_score();
+    double score = game.estimate_score();
     double komi = game.get_komi();
     std::cout << "\n================ Area Score (Komi: " << komi << ") ================\n";
     std::cout << "Stones on Board -> Black (X): " << game.get_black_cnt()
@@ -298,6 +298,7 @@ static void run_gtp(Game& game, int default_time_ms = 1000) {
         "time_settings",
         "time_left",
         "final_score",
+        "final_status_list",
         "showboard"
     };
 
@@ -607,7 +608,7 @@ static void run_gtp(Game& game, int default_time_ms = 1000) {
                     continue;
                 }
             }
-            double score = game.calculate_score();
+            double score = game.estimate_score();
             std::ostringstream oss;
             oss << std::fixed << std::setprecision(1);
             if (score > 0.0) {
@@ -616,6 +617,55 @@ static void run_gtp(Game& game, int default_time_ms = 1000) {
                 oss << "B+" << (-score);
             } else {
                 oss << "0";
+            }
+            reply_ok(id_str, oss.str());
+        } else if (cmd_name == "final_status_list") {
+            std::string status_tok;
+            if (!(iss >> status_tok)) {
+                reply_err(id_str, "syntax error");
+                continue;
+            }
+            status_tok = to_lower_str(status_tok);
+            if (status_tok != "dead" && status_tok != "alive" && status_tok != "seki") {
+                reply_err(id_str, "syntax error");
+                continue;
+            }
+            if (status_tok == "seki") {
+                reply_ok(id_str);
+                continue;
+            }
+            const Board& b = game.get_board();
+            std::array<bool, CELL_CNT> is_dead_root{};
+            if (game.is_game_over() == EndgameStatus::Pass || b.has_dead_stones()) {
+                for (int16_t i = 0; i < b.get_cell_cnt(); ++i) {
+                    if (b.is_dead_stone(i)) is_dead_root[b.get_root(i)] = true;
+                }
+            } else {
+                for (int16_t root : get_dead_group_roots(b, game.get_turn())) {
+                    is_dead_root[root] = true;
+                }
+            }
+            const bool want_dead = (status_tok == "dead");
+            std::array<bool, CELL_CNT> seen_root{};
+            std::ostringstream oss;
+            bool first_line = true;
+            for (int16_t i = 0; i < b.get_cell_cnt(); ++i) {
+                State s = b.get_cell_unchecked(i);
+                if (s != State::Black && s != State::White) continue;
+                int16_t root = b.get_root(i);
+                if (seen_root[root]) continue;
+                seen_root[root] = true;
+                if (is_dead_root[root] != want_dead) continue;
+                if (!first_line) oss << "\n";
+                first_line = false;
+                int16_t curr = root;
+                bool first_stone = true;
+                do {
+                    if (!first_stone) oss << " ";
+                    first_stone = false;
+                    oss << id_to_gtp_vertex(curr, b.get_size());
+                    curr = b.get_next_stone(curr);
+                } while (curr != root);
             }
             reply_ok(id_str, oss.str());
         } else if (cmd_name == "showboard") {

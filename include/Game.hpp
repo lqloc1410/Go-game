@@ -32,9 +32,9 @@ public:
 
     Color get_turn() const {return history.get_turn();}
     bool undo() {return history.undo_move(board);}
-    bool redo() {return history.redo_move(board);}
-    bool pass() {return history.pass(history.get_turn());}
-    bool pass(Color color) {return history.pass(color);}
+    bool redo();
+    bool pass();
+    bool pass(Color color);
     bool resign() {return history.resign(history.get_turn());}
     bool resign(Color color) {return history.resign(color);}
     std::optional<Color> get_resigned_player() const { return history.get_resigned_player(); }
@@ -45,6 +45,14 @@ public:
     int get_black_cnt() const { return board.get_black_cnt(); }
     int get_white_cnt() const { return board.get_white_cnt(); }
     double calculate_score() const { return board.calculate_score(); }
+    double estimate_score(int rollout_cnt = 300) const;
+    bool toggle_dead_group(int16_t id) { return board.toggle_dead_group(id); }
+    bool toggle_dead_group(int r, int c) { return board.toggle_dead_group(r, c); }
+    void clear_dead_stones() { board.clear_dead(); }
+    void auto_mark_dead_stones(int rollout_cnt = 300);
+    bool has_dead_stones() const { return board.has_dead_stones(); }
+    bool is_dead_stone(int16_t id) const { return board.is_dead_stone(id); }
+    bool is_dead_stone(int r, int c) const { return board.is_dead_stone(r, c); }
     State get_cell(int r, int c) const { return board.get_cell(r, c); }
     State get_cell(Point p) const { return board.get_cell(p.r, p.c); }
     const Board& get_board() const { return board; }

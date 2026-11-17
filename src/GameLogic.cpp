@@ -279,8 +279,9 @@ int16_t Board::get(Point point) const{
 }
 
 // AI-assisted: see AI08
+template <bool CheckDead>
 int Board::score_cnt_helper(int16_t id) const{
-    if (board[id] != State::Empty || visited[id]) return 0;
+    if ((board[id] != State::Empty && (!CheckDead || !is_dead[id])) || visited[id]) return 0;
 
     bool touches_white = false;
     bool touches_black = false;
@@ -300,8 +301,8 @@ int Board::score_cnt_helper(int16_t id) const{
             int nid = get(nr, nc);
             if (visited[nid]) continue;
 
-            if (board[nid] == State::Black) touches_black = true;
-            else if (board[nid] == State::White) touches_white = true;
+            if (board[nid] == State::Black && (!CheckDead || !is_dead[nid])) touches_black = true;
+            else if (board[nid] == State::White && (!CheckDead || !is_dead[nid])) touches_white = true;
             else{
                 visited[nid] = true;
                 area += 1;
@@ -406,10 +407,11 @@ bool Board::is_suicide(int16_t id, Color color, SmallVec4 &opponent){
 }
 
 // AI-assisted: see AI03
-Board::Board(int sz, double km){
+Board::Board(int sz, double km, int hc){
     if (sz < 2 || sz > MAX_BOARD_WIDTH) throw std::invalid_argument("Board size must be between 2 and MAX_BOARD_WIDTH");
     board_size = sz; 
     komi = km;
+    handicap = hc;
     liberty_tracker = DSU(sz);  
     cell_cnt = board_size*board_size;
     seen_hashes.reserve(3 * cell_cnt);
@@ -427,7 +429,8 @@ Board::Board(int sz, double km){
 }
 
 // AI-assisted: see AI17
-bool Board::is_legal(int16_t curr_id, Color color)  {
+template <bool FastKo>
+bool Board::is_legal_impl(int16_t curr_id, Color color)  {
     if (curr_id < 0 || curr_id >= cell_cnt || board[curr_id] != State::Empty) {
         return false;
     }
@@ -448,9 +451,21 @@ bool Board::is_legal(int16_t curr_id, Color color)  {
         }
     }
 
-    if (has_seen_hash(tmp_hash)) return false;
+    if constexpr (FastKo) {
+        if (has_seen_hash_fast(tmp_hash)) return false;
+    } else {
+        if (has_seen_hash(tmp_hash)) return false;
+    }
 
     return true;
+}
+
+bool Board::is_legal(int16_t curr_id, Color color) {
+    return is_legal_impl<false>(curr_id, color);
+}
+
+bool Board::is_legal_fast(int16_t curr_id, Color color) {
+    return is_legal_impl<true>(curr_id, color);
 }
 
 // AI-assisted: see AI17
@@ -519,7 +534,7 @@ bool Board::is_eye(int16_t id, Color color) {
 void Board::getReasonablePts(Color color, std::vector<int16_t> &out) {
     out.clear();
     int total_stones = black_cnt + white_cnt;
-    bool has_stones = total_stones > (board_size * 3);
+    bool has_stones = total_stones > 0;
     bool allow_strategic_lines = total_stones < (cell_cnt / 3);
 
     for (int16_t i = 0; i < cell_cnt; ++i) {
@@ -568,7 +583,8 @@ void Board::getReasonablePts(Color color, std::vector<int16_t> &out) {
 }
 
 // AI-assisted: see AI02, AI03, AI04, AI05, AI08, AI19
-MoveState Board::place(int16_t curr_id, Color color) {
+template <bool FastKo>
+MoveState Board::place_impl(int16_t curr_id, Color color) {
     if (curr_id < 0 || curr_id >= cell_cnt) {
         return {MoveStatus::OutOfBounds};
     }
@@ -598,7 +614,13 @@ MoveState Board::place(int16_t curr_id, Color color) {
         }
     }
 
-    if (has_seen_hash(tmp_hash)) return MoveState{MoveStatus::Ko};
+    if constexpr (FastKo) {
+        if (has_seen_hash_fast(tmp_hash)) return MoveState{MoveStatus::Ko};
+    } else {
+        if (has_seen_hash(tmp_hash)) return MoveState{MoveStatus::Ko};
+    }
+
+    if (dead_cnt > 0) clear_dead();
 
     MoveState res;
     res.undo_state.emplace();
@@ -658,14 +680,26 @@ MoveState Board::place(int16_t curr_id, Color color) {
     return res;
 }
 
+MoveState Board::place(int16_t curr_id, Color color){
+    return place_impl<false>(curr_id, color);
+}
+
+MoveState Board::place_fast(int16_t curr_id, Color color){
+    return place_impl<true>(curr_id, color);
+}
+
 MoveState Board::place(Point point, Color color){
     return place(get(point), color);
 }
 
+MoveState Board::place_fast(Point point, Color color){
+    return place_fast(get(point), color);
+}
 
 // AI-assisted: see AI05, AI08, AI20, AI23
 void Board::undo(const UndoState &state){
     if (state.type != MoveType::Place) return;
+    if (dead_cnt > 0) clear_dead();
     board[state.id] = State::Empty;
     add_empty(state.id);
     State opp_state = ColortoState(invertColor(state.color));
@@ -723,16 +757,163 @@ void Board::display(std::ostream& os) const {
 
 // AI-assisted: see AI08
 double Board::calculate_score() const{
-    int score = white_cnt - black_cnt;
-
     visited.fill(false);
+
+    if (dead_cnt == 0) {
+        int score = white_cnt - black_cnt + handicap;
+        for (int i = 0; i < cell_cnt; ++i){
+            if (board[i] == State::Empty && !visited[i]){
+                score += score_cnt_helper<false>(i);
+            }
+        }
+        return static_cast<double>(score) + komi;
+    }
+
+    int score = handicap;
     for (int i = 0; i < cell_cnt; ++i){
-        if (board[i] == State::Empty && !visited[i]){
-            score += score_cnt_helper(i);
+        if (!is_dead[i] && board[i] != State::Empty){
+            score += (board[i] == State::White) ? 1 : -1;
+        } else if (!visited[i]){
+            score += score_cnt_helper<true>(i);
         }
     }
 
     return static_cast<double>(score) + komi;
+}
+
+struct Region {
+    bool active = true;
+    std::vector<int16_t> border_roots; // all X-chains touching this region
+    std::vector<int16_t> vital_for;    // X-chains adjacent to EVERY empty cell in this region
+};
+
+std::bitset<CELL_CNT> Board::get_alive_mask(Color color) const{
+    std::array<bool, CELL_CNT> visited{};
+    std::array<bool, CELL_CNT> in_C{};
+    std::queue<int16_t> q;
+    std::vector<int16_t> distinct_roots;
+    for (int i = 0; i < cell_cnt; ++i){
+        int16_t root = get_root(i);
+        if (ColortoState(color) == board[i] && !in_C[root]) {
+            in_C[root] = true; 
+            distinct_roots.push_back(root);
+        }
+    }
+
+    visited.fill(false);
+
+    const State target = ColortoState(color);
+    std::vector<Region> regions;
+    std::array<int, CELL_CNT> border_stamp{};
+    std::array<int, CELL_CNT> adj_stamp{};
+    std::array<int, CELL_CNT> adj_empty_cnt{};
+    int region_id = 0;
+    int empty_cell_id = 0;
+
+    for (int16_t i = 0; i < cell_cnt; ++i){
+        if (board[i] != ColortoState(color) && !visited[i]){
+            region_id++;
+            Region reg;
+            int empty_cnt = 0;
+
+            visited[i] = true;
+            q.push(i);
+            while (!q.empty()){
+                int16_t u = q.front();
+                q.pop();
+
+                const bool is_empty = (board[u] == State::Empty);
+                if (is_empty){
+                    empty_cnt++; empty_cell_id++;
+                }
+
+                int r = u / board_size, c = u % board_size;
+
+                for (int d = 0; d < 4; ++d){
+                    int nr = r + dr[d], nc = c + dc[d];
+                    if (nr < 0 || nr >= board_size || nc < 0 || nc >= board_size) continue;
+
+                    int16_t nid = get(nr, nc);
+
+                    if (board[nid] == target){
+                        int16_t root = get_root(nid);
+
+                        if (border_stamp[root] != region_id){
+                            border_stamp[root] = region_id;
+                            adj_empty_cnt[root] = 0;
+                            reg.border_roots.push_back(root);
+                        }
+
+                        if (is_empty && adj_stamp[root] != empty_cell_id){
+                            adj_stamp[root] = empty_cell_id;
+                            adj_empty_cnt[root]++;
+                        }
+                    } else if (!visited[nid]){
+                        visited[nid] = true;
+                        q.push(nid);
+                    }
+                }
+            }
+
+            if (empty_cnt > 0) {
+                for (int16_t root : reg.border_roots) {
+                    if (adj_empty_cnt[root] == empty_cnt) {
+                        reg.vital_for.push_back(root);
+                    }
+                }
+            }
+
+            if (!reg.vital_for.empty()) {
+                regions.push_back(std::move(reg));
+            }
+        }
+    }
+
+    std::array<int, CELL_CNT> vital_cnt{};
+    bool changed = true;
+    while (changed) {
+        changed = false;
+
+        // 1. Any region bordering a dead/removed X-chain stops being unconditionally enclosed
+        for (Region& reg : regions) {
+            if (!reg.active) continue;
+            for (int16_t b : reg.border_roots) {
+                if (!in_C[b]) {
+                    reg.active = false;
+                    changed = true;
+                    break;
+                }
+            }
+        }
+
+        // 2. Count surviving vital regions per active chain
+        vital_cnt.fill(0);
+        for (const Region& reg : regions) {
+            if (!reg.active) continue;
+            for (int16_t b : reg.vital_for) {
+                if (in_C[b]) vital_cnt[b]++;
+            }
+        }
+
+        // 3. Chains with fewer than 2 vital regions drop out of C
+        for (int16_t b : distinct_roots) {
+            if (in_C[b] && vital_cnt[b] < 2) {
+                in_C[b] = false;
+                changed = true;
+            }
+        }
+    }
+
+    std::bitset<CELL_CNT> alive;
+    for (int16_t root : distinct_roots) {
+        if (!in_C[root]) continue;
+        int16_t curr = root;
+        do {
+            alive.set(curr);
+            curr = get_next_stone(curr);
+        } while (curr != root);
+    }
+    return alive;
 }
 
 HistoryTracker::HistoryTracker(int handicap, Color start_turn) {
@@ -788,6 +969,7 @@ MoveStatus HistoryTracker::place_setup(Board &board, int16_t id, Color color){
 // AI-assisted: see AI05, AI23
 bool HistoryTracker::undo_move(Board &board){
     if (undo_stack.empty()) return false;
+    if (board.has_dead_stones()) board.clear_dead();
 
     const UndoState& tmp = undo_stack.back();
     if (tmp.type == MoveType::Place){
@@ -802,6 +984,7 @@ bool HistoryTracker::undo_move(Board &board){
 // AI-assisted: see AI05
 bool HistoryTracker::redo_move(Board &board){
     if (redo_stack.empty()) return false;
+    if (board.has_dead_stones()) board.clear_dead();
     
     RedoState tmp = redo_stack.back();
 

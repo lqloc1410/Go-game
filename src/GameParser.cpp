@@ -357,7 +357,7 @@ bool GameLog::parse(const std::string &raw_sgf){
 
 
 bool GameLog::load_board_data(Board &board_org, HistoryTracker &history_org){
-    Board board = Board(BoardSize, komi);
+    Board board = Board(BoardSize, komi, HandicapBlack);
     HistoryTracker history = HistoryTracker(HandicapBlack, starting_player);
 
     for (const Point &p: AddedPositionsBlack){

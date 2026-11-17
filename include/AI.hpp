@@ -21,6 +21,10 @@ namespace AIConstants {
     inline constexpr double kDefaultParentWinrate = 0.5;
     inline constexpr int kMaxSelectDepth = 300;
     inline constexpr double kProgressiveWideningCoeff = 0.5;
+    inline constexpr int kPwRootStartSmall = 12;                       // Initial root children on <=9x9
+    inline constexpr int kPwRootStartMedium = 16;                      // Initial root children on <=13x13
+    inline constexpr int kPwRootStartLarge = 20;                       // Initial root children on >13x13 (19x19)
+    inline constexpr int kPwMinStartCnt = 5;                           // Floor for deep tree nodes so tactics still branch
     inline constexpr uint32_t kTieBreakerRange = 1024;
     inline constexpr double kTieBreakerScale = 1e-6;
     inline constexpr double kRootPassScore = 16.0;
@@ -34,20 +38,27 @@ namespace AIConstants {
     inline constexpr int kMaxCounterCaptureChain = 16;
     inline constexpr int kSafeCaptureMinLibs = 3;
 
-    // Candidate move scoring: penalties & bonuses
+    // Candidate move scoring: tactical penalties & bonuses
     inline constexpr double kMultiStoneSelfAtariPenalty = 0.01;
-    inline constexpr double kThrowInAtariPenalty = 0.15;
-    inline constexpr double kSingleStoneSelfAtariPenalty = 0.02;
+    inline constexpr double kThrowInAtariPenalty = 0.03;               // Harshly downweight non-capturing 1-lib throw-ins so priors favor solid shapes
+    inline constexpr double kSingleStoneSelfAtariPenalty = 0.01;
     inline constexpr double kSelfLibertyTighteningPenalty = 0.05;
     inline constexpr double kPureSelfLibertyFillPenalty = 0.02;
+    inline constexpr double kFortressOverfillPenalty = 0.20;           // Prevent filling empty joints inside already-safe (>=4 lib) friendly walls
+    inline constexpr double kWeakIsolatedAttachmentPenalty = 0.40;     // Discount fragile 2-lib isolated probes touching strong (>=3 lib) enemy stones
     inline constexpr double kSharedLibertyDisadvantagePenalty = 0.25;
+    inline constexpr int kMaxBonusGroupSize = 10;                      // Cap stone-count multipliers so huge groups don't monopolize top-10 widening
+    inline constexpr int kMaxAttackThreeLibGroupSize = 8;
+    inline constexpr int kSafeFortressMinLibs = 4;                     // Minimum liberties for two friendly groups to be considered safe enough not to overfill
+    inline constexpr int kUrgentConnectMaxLibs = 3;                    // Only award connection bonuses when a group is <=3 libs or contested locally
     inline constexpr double kCaptureBonusPerStone = 20.0;
     inline constexpr double kSaveAtariSafeBonusPerStone = 22.0;
     inline constexpr double kSaveAtariTightBonusPerStone = 12.0;
-    inline constexpr double kDefendTwoLibBonusPerStone = 6.0;
-    inline constexpr double kConnectGroupsBonusPerStone = 2.5;
-    inline constexpr double kAtariSafeBonusPerStone = 5.0;
-    inline constexpr double kAtariTightBonusPerStone = 2.5;
+    inline constexpr double kDefendTwoLibBonusPerStone = 5.0;
+    inline constexpr double kConnectGroupsBonusPerStone = 2.0;
+    inline constexpr double kAtariSafeBonusPerStone = 6.5;
+    inline constexpr double kAtariTightBonusPerStone = 3.0;
+    inline constexpr double kAttackThreeLibBonusPerStone = 2.0;        // Apply attacking pressure to loose 3-lib enemy groups before they stabilize
 
     // Candidate move scoring: opening & positional geometry
     inline constexpr int kMinOpeningStoneLimit = 8;
@@ -76,15 +87,18 @@ namespace AIConstants {
     inline constexpr int kFastRandomProbeThreshold = 8;
     inline constexpr int kFastRandomProbeAttempts = 8;
     inline constexpr double kResignScore = 1000.0;
-    inline constexpr int kEarlyDoublePassStoneFactor = 2;
     inline constexpr int kRolloutMaxStepsFactor = 3;
     inline constexpr int kRolloutCounterCaptureMaxSteps = 12;
-    inline constexpr uint32_t kLocalPatternRolloutDenom = 3;
+    inline constexpr uint32_t kLocalPatternRolloutDenom = 4;           // 3/4 probability ((denom-1)/denom) to sample 3x3 local pattern neighbors first
 
     // Backpropagation
-    inline constexpr double kScoreMarginScaleFactor = 0.15;
+    inline constexpr double kInvPi = 0.31830988618379067154;
+    inline constexpr double kScoreMarginScaleFactor = 0.6;             // sqrt(cell_cnt) multiplier (~5.4 on 9x9, ~11.4 on 19x19) for atan score scaling
     inline constexpr double kWinrateWeight = 0.85;
     inline constexpr double kScoreMarginWeight = 0.15;
+    inline constexpr int kMinDynamicMarginRootVisits = 64;             // Require stable reused root before shifting bonus center to preserve leads
+    inline constexpr double kDynamicMarginLeadThreshold = 4.0;
+    inline constexpr double kDynamicMarginOffsetFactor = 0.5;
 
     // Multi-threading & pass decision thresholds
     inline constexpr uint32_t kThreadSeedStride = 10007U;
@@ -94,7 +108,11 @@ namespace AIConstants {
     inline constexpr double kHopelessPositionWinrate = 0.15;
     inline constexpr double kPassWinrateMargin = 0.03;
     inline constexpr double kClosePassWinrateMargin = 0.005;
+    inline constexpr double kPassScoreMargin = 1.5;                    // Refuse passing back if a stone move gains >1.5 extra points
     inline constexpr double kNormalTurnPassWinrate = 0.85;
+    inline constexpr double kSafeTieWinrateThreshold = 0.90;           // Minimum winrate to allow score-preserving tie-breaking at root
+    inline constexpr double kSafeTieWinrateDiff = 0.015;
+    inline constexpr double kSafeTieScoreGain = 2.0;
 }
 
 static inline std::pair<int, int> transform_offset(int i, int j, int k) {
@@ -309,6 +327,10 @@ public:
     }
 };
 
+void simulate_rollouts(Board &board, std::vector<UndoState>& undo_stack, Color curr_turn, int16_t prev_move = -1);
+
+std::vector<int16_t> get_dead_group_roots(const Board &board, Color curr_turn, int rollout_cnt = 300);
+
 struct ScoredCandidate{
     int16_t id;
     double score;
@@ -328,12 +350,12 @@ struct MCTSNode{
     Color prev_player;
     int visits = 0;
     double wins = 0.0;
+    double score_sum = 0.0;
     double priority = 0.0;
     MCTSNode *parent = nullptr;
 
-    static constexpr int max_child_org = 10;
-
-    int max_child_cnt = 10;
+    int max_child_org = AIConstants::kPwRootStartSmall;
+    int max_child_cnt = AIConstants::kPwRootStartSmall;
     std::vector<ScoredCandidate> unexpanded;
     std::vector<std::unique_ptr<MCTSNode>> children;
 
@@ -365,15 +387,11 @@ private:
 
     double rollout(MCTSNode *node);
 
-    void backprop(MCTSNode *node, double score);
+    void backprop(MCTSNode *node, double score, double white_score_offset = 0.0);
 
     void rollback();
 
     double score_candidate_move(int16_t id, Color player);
-
-    bool is_bad_self_atari(int16_t cid, const UndoState& u);
-
-    int16_t play_rand_move(Color color);
 
 public:
     MCTSInstance() = delete;

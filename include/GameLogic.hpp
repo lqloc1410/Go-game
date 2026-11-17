@@ -274,9 +274,12 @@ private:
 
     // Komi tracker
     double komi = 7.5;
+    int handicap = 0;
 
     // implemeted flat array for better cache locality.
     std::array<State, CELL_CNT> board{};
+    std::array<bool, CELL_CNT> is_dead{};
+    int dead_cnt = 0;
 
     // Structures to implement Zorbist Hashing.
     Hash curr_hash;
@@ -286,15 +289,21 @@ private:
         return std::find(seen_hashes.rbegin(), seen_hashes.rend(), h) != seen_hashes.rend();
     }
 
+    bool has_seen_hash_fast(const Hash &h, size_t depth = 16) const {
+        const auto end_it = seen_hashes.rbegin() + std::min(seen_hashes.size(), depth);
+        return std::find(seen_hashes.rbegin(), end_it, h) != end_it;
+    }
+
     // DSU for liberty tracking
     DSU liberty_tracker;
 
-    // Reusable stack & visited array for DFS
+    // Reusable stack, queue & visited array for DFS
     mutable std::vector<int> st;
     mutable std::array<bool, CELL_CNT> visited{};
 
     // AI-assisted: see AI08
     // Helper for territory counting
+    template <bool CheckDead>
     int score_cnt_helper(int16_t id) const;
 
     // AI-assisted: see AI04, AI13, AI16, AI18
@@ -305,6 +314,12 @@ private:
     // Helper to check if a placement is suicide.
     // Also collects opponent roots to check hash.
     bool is_suicide(int16_t id, Color color, SmallVec4 &opponent);
+
+    template <bool FastKo>
+    bool is_legal_impl(int16_t curr_id, Color color);
+
+    template <bool FastKo>
+    MoveState place_impl(int16_t curr_id, Color color);
 
     
 
@@ -330,6 +345,8 @@ private:
         empty_idx[id] = static_cast<int16_t>(empty_cnt);
         empty_cnt++;
     }
+
+    void clear_dead_tags() {is_dead.fill(false);}
 public:
     void seed_gen(uint64_t s) { gen.seed(s); }
 
@@ -341,7 +358,7 @@ public:
         return static_cast<uint64_t>(gen());
     }
     // AI-assisted: see AI03
-    Board(int sz = 19, double km = 7.5);
+    Board(int sz = 19, double km = 7.5, int hc = 0);
 
     // Helper to get cell id from Point
     int16_t get(Point point) const;
@@ -351,6 +368,7 @@ public:
 
     // AI-assisted: see AI17
     bool is_legal(int16_t curr_id, Color color);
+    bool is_legal_fast(int16_t curr_id, Color color);
 
     // AI-assisted: see AI17
     std::vector<int16_t> get_legal_moves(Color color);
@@ -367,8 +385,10 @@ public:
 
     // AI-assisted: see AI02, AI03, AI04, AI05, AI08, AI19
     MoveState place(int16_t curr_id, Color color);
+    MoveState place_fast(int16_t curr_id, Color color);
 
     MoveState place(Point point, Color color);
+    MoveState place_fast(Point point, Color color);
 
     // AI-assisted: see AI05, AI08, AI20, AI23
     void undo(const UndoState &state);
@@ -382,6 +402,10 @@ public:
     double get_komi() const;
 
     void set_komi(double km) { komi = km; }
+
+    int get_handicap() const { return handicap; }
+
+    void set_handicap(int hc) { handicap = hc; }
 
     inline int16_t to_id(int r, int c) const {
         if (r < 0 || c < 0 || r >= board_size || c >= board_size) return -1;
@@ -404,6 +428,36 @@ public:
     // AI-assisted: see AI12
     void display(std::ostream& os = std::cout) const;
 
+    bool toggle_dead_group(int16_t id){
+        if (id < 0 || id >= cell_cnt) return false;
+        if (board[id] != State::Black && board[id] != State::White) return false;
+        const bool target = !is_dead[id];
+        int16_t curr = id;
+        do {
+            if (is_dead[curr] != target) {
+                is_dead[curr] = target;
+                dead_cnt += target ? 1 : -1;
+            }
+            curr = liberty_tracker.get_next_stone(curr);
+        } while (curr != id);
+        return true;
+    }
+
+    bool toggle_dead_group(int r, int c) { return toggle_dead_group(to_id(r, c)); }
+
+    void clear_dead() {
+        is_dead.fill(false);
+        dead_cnt = 0;
+    }
+
+    bool has_dead_stones() const { return dead_cnt > 0; }
+
+    bool is_dead_stone(int16_t id) const {
+        return id >= 0 && id < cell_cnt && is_dead[id];
+    }
+
+    bool is_dead_stone(int r, int c) const { return is_dead_stone(to_id(r, c)); }
+
     // AI-assisted: see AI08
     double calculate_score() const;
 
@@ -424,6 +478,11 @@ public:
     int16_t get_root(int id) const {return liberty_tracker.get(id);}
     int16_t get_root(int r, int c) const {return get_root(get(r, c));}
     int16_t get_root(Point point) const {return get_root(get(point));}
+
+    std::bitset<CELL_CNT> get_alive_mask(Color color) const;
+    std::bitset<CELL_CNT> get_alive_mask() const{
+        return get_alive_mask(Color::Black) | get_alive_mask(Color::White);
+    }
 };
 
 // AI-assisted: see AI05
