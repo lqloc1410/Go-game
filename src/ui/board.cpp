@@ -185,6 +185,14 @@ void BoardView::rebuildStatic() const {
         dot.setFillColor(style.lineColor);
         staticTex_.draw(dot);
     }
+
+    for (auto s : starPoints(n_)) {
+        sf::CircleShape dot(starR);
+        dot.setOrigin(starR, starR);
+        dot.setPosition(P(s.x, s.y));
+        dot.setFillColor(style.lineColor);
+        staticTex_.draw(dot);
+    }
     staticTex_.display();        
     staticDirty_ = false;
 }

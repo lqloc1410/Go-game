@@ -38,7 +38,7 @@ bool Audio::load() {
     }
     else {
         bgm.setLoop(true);
-        bgm.setVolume(40.f);
+        bgm.setVolume(70.f);
         bgm.play();
     }
 

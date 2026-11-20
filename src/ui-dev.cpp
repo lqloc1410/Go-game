@@ -3,6 +3,7 @@
 #include <sstream>
 #include <thread>
 #include <algorithm> // AI-assisted: seeAI79
+#include <cmath>
 #include "mode/gameSession.hpp"
 #include "ui/board.hpp"
 #include "ui/hudView.hpp"
@@ -17,7 +18,26 @@ static std::string marginText(double s) {
     os << std::fixed << std::setprecision(1) << (s > 0 ? s : -s);
     return std::string(s > 0 ? "White" : "Black") + " leads by " + os.str();
 }
+static sf::ConvexShape roundedRect(sf::Vector2f size, float radius, int pts = 10) {
+    sf::ConvexShape shape(4 * pts);
+    const float pi = 3.14159265f;
+    const sf::Vector2f centers[4] = {{size.x - radius, radius}, {size.x - radius, size.y - radius},
+                                     {radius, size.y - radius}, {radius, radius}};
+    const float start[4] = {-90.f, 0.f, 90.f, 180.f};              // one quarter circle per corner
+    int idx = 0;
+    for (int k = 0; k < 4; ++k)
+        for (int i = 0; i < pts; ++i) {
+            float a = (start[k] + 90.f * i / (pts - 1)) * pi / 180.f;
+            shape.setPoint(idx++, {centers[k].x + radius * std::cos(a), centers[k].y + radius * std::sin(a)});
+        }
+    return shape;
+}
 
+static std::string pointsText(double s) {
+    std::ostringstream os;
+    os << std::fixed << std::setprecision(1) << (s > 0 ? s : -s);
+    return os.str();
+}
 int main() {
 
     sf::RenderWindow window(sf::VideoMode(1150, 800), "Go UI - dev");
@@ -58,10 +78,11 @@ int main() {
 
     // AI-assisted: see AI43, AI44
 
-    enum class screen { Menu, Game, Placeholder}; //Placeholder is temporary for Saved game and Settings
+    enum class screen { Menu, Game, GameOver, Placeholder}; //Placeholder is temporary for Saved game and Settings
     screen screen = screen::Menu;
     std::string placeholderTitle;
     bool gameStarted = false;
+    Phase prevPhase = game.phase();
     gameCfg cfg;
     menuView menu(fonts, cfg);
 
@@ -71,11 +92,44 @@ int main() {
 
     button resumeBtn("Resume play", {975.f, 400.f}, {260.f, 46.f}, fonts.body);
     button doneBtn("Done", {975.f, 465.f}, {260.f, 46.f}, fonts.body);
-    Phase prevPhase = game.phase();
+    
+    button goNewBtn ("New Game", {575.f, 440.f}, {300.f, 54.f}, fonts.body);
+    button goViewBtn ("View board", {575.f, 510.f}, {300.f, 54.f}, fonts.body);
+    button goMenuBtn ("Main menu", {575.f, 580.f}, {300.f, 54.f}, fonts.body);
+    
+    sf::RectangleShape overlay({1150.f, 800.f});
+    overlay.setFillColor(sf::Color(0, 0, 0, 170));
+    
+    sf::ConvexShape box = roundedRect({520.f, 460.f}, 24.f);
+    box.setPosition(575.f - 260.f, 400.f - 230.f); 
+    box.setFillColor(sf::Color(40, 32, 26, 245));
+    box.setOutlineThickness(3.f);
+    box.setOutlineColor(sf::Color(200, 160, 90));
 
+    sf::RectangleShape divider({440.f, 2.f});
+    divider.setOrigin(220.f, 1.f);
+    divider.setPosition(575.f, 395.f);
+    divider.setFillColor(sf::Color(200, 160, 90, 120));
+    
+    bool over = false;
+    
+
+    auto isDead = [&](int x, int y) {
+        return game.isDeadStone(x, y);
+    };
+
+    auto startNewGame = [&] {
+        game.newGame(cfg.boardSize, 7.5, 0); //mchau nho implement handicaps nhe :3
+        board.setBoardSize(cfg.boardSize);
+        board.setHover(std::nullopt);
+        over = false;
+        gameStarted = true;
+        screen = screen::Game;
+        prevPhase = game.phase();
+    };
 
     // Báo kết quả đúng một lần khi ván vừa kết thúc
-    bool over = false;
+    
     auto checkEnd = [&] {
         
 
@@ -124,12 +178,7 @@ int main() {
                 menu.handleEvent(e, mouse);
                 switch (menu.takeAction()) {
                     case menuAction::newGame:
-                        game.newGame(cfg.boardSize, 7.5, 0); //mchau nho implement handicaps nhe :3
-                        board.setBoardSize(cfg.boardSize);
-                        board.setHover(std::nullopt);
-                        
-                        gameStarted = true;
-                        screen = screen::Game;
+                        startNewGame();
                         break;
                     case menuAction::resume:
                         if (gameStarted){
@@ -165,10 +214,28 @@ int main() {
             if (e.type == sf::Event::MouseMoved)
                 board.setHover(game.phase() == Phase::Playing ? board.pixelToGrid(mouse) : std::nullopt);
 
+            if (screen == screen::GameOver) {
+                if (e.type == sf::Event::MouseButtonPressed && e.mouseButton.button == sf::Mouse::Left) {
+                    if (goNewBtn.contains(mouse)) {
+                        startNewGame();
+                    } 
+                    else if (goViewBtn.contains(mouse)) {
+                        screen = screen::Game;   
+                    }
+                    else if (goMenuBtn.contains(mouse)) {
+                        screen = screen::Menu;
+                    }
+                }
+                if (e.type == sf::Event::KeyPressed && e.key.code == sf::Keyboard::Escape) {
+                    screen = screen::Menu;
+                }
+                continue;
+            }
+
             if (e.type == sf::Event::MouseButtonPressed && e.mouseButton.button == sf::Mouse::Left) {
                 switch (game.phase()) {
                     case Phase::Marking:
-                        if (doneBtn.contains(mouse)) game.score();
+                        if (doneBtn.contains(mouse)) game.confirmScore();
                         else if (resumeBtn.contains(mouse)) {
                             game.resumePlay();
                             hud.push("Back to play");
@@ -241,21 +308,33 @@ int main() {
                             if (!game.redo()) hud.push("Nothing to redo!"); 
                         }
                         break;
-                    case sf::Keyboard::N: game.newGame(); hud.push("Board reset!"); break;
+                    case sf::Keyboard::N: 
+                        game.newGame(); 
+                        over = false;
+                        prevPhase = game.phase();
+                        hud.push("Board reset!"); 
+                        break;
                     case sf::Keyboard::R: if (!game.resign()) hud.push("The game is already over!"); break;
                     case sf::Keyboard::S: if (game.save()) hud.push("Game saved!"); else hud.push("Save failed! Try again."); break;
                     default: break;
                 }
             }
         }
-
         sf::Vector2f mouseNow = window.mapPixelToCoords(sf::Mouse::getPosition(window));
         game.syncPhase();
         Phase ph = game.phase();
         if (ph != prevPhase) {
-            if (ph == Phase::Marking)
-                hud.push("Both players passed.\nClick a group to mark it dead.", 12.f);
+            std::cout << "phase " << static_cast<int>(prevPhase) << " -> " << static_cast<int>(ph) << "\n";   // temporary
+            if (ph == Phase::Marking) {
+                hud.push("Both players passed.\nClick the stone to mark dead.", 4.f);
+            }
+            if (ph == Phase::Finished && screen == screen::Game) screen = screen::GameOver;
             prevPhase = ph;
+        }
+        if (screen == screen::GameOver) {
+            goNewBtn.setHover(goNewBtn.contains(mouseNow));
+            goViewBtn.setHover(goViewBtn.contains(mouseNow));
+            goMenuBtn.setHover(goMenuBtn.contains(mouseNow));
         }
         bool marking = (ph == Phase::Marking);
         resumeBtn.setHover(marking && resumeBtn.contains(mouseNow));
@@ -304,10 +383,7 @@ int main() {
                 }
                 std::optional<GridPos> last;
                 if (auto m = game.lastMove()) last = GridPos{m -> first, m -> second};
-                auto isDead = [&](int x, int y) {
-                    return game.isDeadStone(x, y);
-                };
-
+                
                 board.draw(window, stoneAt, game.currentPlayer(), last, isDead);
                 hud.draw(window, 800.f, game.currentPlayer(), game.isGameOver(), game.blackStones(), game.whiteStones(), headline, subline);
                 
@@ -315,6 +391,41 @@ int main() {
                     resumeBtn.draw(window);
                     doneBtn.draw(window);
                 }
+                break;
+            }
+            case screen::GameOver: {
+                board.draw(window, stoneAt, game.currentPlayer(), std::nullopt, isDead);
+                window.draw(overlay);
+                window.draw(box);
+
+                std::string result, detail;
+                if (auto who = game.resignedPlayer()) {
+                    double s = game.score();
+                    result = (*who == Color::Black) ? "Black resigned" : "White resigned";
+                    detail = (*who == Color::Black) ? "White wins" : "Black wins";
+                }
+                else {
+                    double s = game.score();
+                    if (s > 0.0) {
+                        result = "White wins";
+                        detail = marginText(s);
+                    }
+                    else if (s < 0.0) {
+                        result = "Black wins";
+                        detail = marginText(s);
+                    }
+                    else {
+                        result = "Tie game";
+                        detail = "Score is even (0.0)";
+                    }
+                }
+                textCentered(window, "GAME OVER", fonts.title_bold, 52, {575.f, 230.f}, sf::Color(255, 230, 150));
+                textCentered(window, result, fonts.title_bold, 36, {575.f, 305.f}, sf::Color::White);
+                textCentered(window, detail, fonts.body, 22, {575.f, 365.f}, sf::Color(220, 220, 220));
+                window.draw(divider);
+                goNewBtn.draw(window);
+                goViewBtn.draw(window);
+                goMenuBtn.draw(window);
                 break;
             }
         }   

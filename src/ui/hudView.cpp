@@ -6,6 +6,8 @@ static sf::String u8(const std::string& s) {
 }
 
 void hudView::push(const std::string& t, float sec) {
+    for (auto& old : toasts_)
+        if (old.text == t) { old.left = sec; return; }
     toasts_.push_back({t, sec});
     if (toasts_.size() > 5) toasts_.pop_front();
 }

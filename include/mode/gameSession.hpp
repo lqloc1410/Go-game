@@ -74,6 +74,12 @@ public:
             default: return scoreConfirmed_ ? Phase::Finished : Phase::Marking;
         }
     }
+    bool confirmScore() {
+        if (phase() != Phase::Marking) return false;
+        scoreConfirmed_ = true;
+        return true;
+    }
+    
     bool resumePlay() {
         if (phase() != Phase::Marking) return false;
         clearDeadStones();
