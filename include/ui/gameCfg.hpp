@@ -5,7 +5,7 @@ enum class gameMode { PvP, PvAI };
 enum class difficulty { Easy, Medium, Hard };
 
 enum class ruleSet { Japanese, Chinese, AGA };
-enum class boardTheme { ClassicWood, Bamboo, Slate };   // placeholder themes
+enum class boardTheme { Classic, Bamboo, Slate };   // placeholder themes
 enum class stoneStyle { Classic, SlateAndShell, Modern }; // placeholder styles
 
 inline float defaultKomi(ruleSet r) {
@@ -27,7 +27,7 @@ struct gameCfg {
     // Settings
     bool bgmOn = true;
     bool sfxOn = true;
-    boardTheme theme = boardTheme::ClassicWood;
+    boardTheme theme = boardTheme::Classic;
     stoneStyle stones = stoneStyle::Classic;
     ruleSet rules = ruleSet::Japanese;
 
@@ -39,7 +39,7 @@ struct gameCfg {
     void resetSettings() {
         bgmOn = true;
         sfxOn = true;
-        theme = boardTheme::ClassicWood;
+        theme = boardTheme::Classic;
         stones = stoneStyle::Classic;
         rules = ruleSet::Japanese;
     }

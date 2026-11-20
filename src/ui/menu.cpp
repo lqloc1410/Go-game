@@ -35,11 +35,11 @@ namespace {
 
     const char* themeName(boardTheme t) {
         switch (t) {
-            case boardTheme::ClassicWood: return "Classic Wood";
+            case boardTheme::Classic: return "Classic";
             case boardTheme::Bamboo:      return "Bamboo (WIP)";
             case boardTheme::Slate:       return "Slate (WIP)";
         }
-        return "Classic Wood";
+        return "Classic";
     }
 
     const char* stoneName(stoneStyle s) {
@@ -135,8 +135,7 @@ void menuView::onSettingsClick(int i) {
             settingsChanged = true;
             break;
         case 4: // Cycle Rule Set (Japanese -> Chinese -> AGA)
-            auto nextRule = static_cast<ruleSet>((static_cast<int>(cfg.rules) + 1) % 3);
-            cfg.setRuleSet(nextRule);
+            cfg.setRuleSet(static_cast<ruleSet>((static_cast<int>(cfg.rules) + 1) % 3));
             settingsChanged = true;
             break;
         case 5: // Reset
