@@ -20,3 +20,5 @@ build-release/
 training-data/
 katago/
 gnugo-3.8/
+gtp_logs/
+sample-games/
