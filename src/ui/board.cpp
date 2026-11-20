@@ -96,7 +96,7 @@ void BoardView::draw(sf::RenderWindow& w,
     stone.setOrigin(r, r);
 
     auto drawCross = [&](sf::Vector2f p, sf::Color c) {
-        float len = r * 1.1f, thick = std::max(2.f, r * 0.12f);
+        float len = r * 1.1f, thick = std::max(4.f, r * 0.12f);
         for (float angle : {45.f, -45.f}) {
             sf::RectangleShape bar({len, thick});
             bar.setOrigin(len / 2.f, thick / 2.f);
@@ -122,7 +122,7 @@ void BoardView::draw(sf::RenderWindow& w,
             stone.setOutlineColor(sf::Color(0, 0, 0, dead ? 60 : 120));
             w.draw(stone);
 
-            if (dead) drawCross(gridToPixel(x, y), sf::Color(220, 60, 60));
+            if (dead) drawCross(gridToPixel(x, y), sf::Color(148, 3, 3));
         }
     
     // 5) quân mờ khi rê chuột vào ô trống

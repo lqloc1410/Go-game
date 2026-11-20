@@ -7,7 +7,7 @@
 class hudView {
 public:
     explicit hudView(const Fonts& fonts) : fonts_(fonts) {} // AI-assisted: see AI35
-    void push(const std::string& utf8, float seconds = 2.5f);
+    void push(const std::string& utf8, float seconds = 5.f);
     void update(float dt);
     void draw(sf::RenderWindow& w, float panelX, int currentPlayer,
               bool gameOver, int blackStones, int whiteStones,

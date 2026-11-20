@@ -8,7 +8,7 @@ button::button(const std::string& label, sf::Vector2f center, sf::Vector2f size,
     box.setPosition(center);
     box.setOutlineThickness(2.f);
     text.setFont(font);
-    text.setCharacterSize(24);
+    text.setCharacterSize(22);
     setLabel(label);
 }
 
@@ -22,7 +22,7 @@ void button::setLabel(const std::string& s) {
 void button::draw(sf::RenderWindow& w) {
     if (!enabled) {
         box.setFillColor(sf::Color(68, 58, 53,120));
-        box.setOutlineColor(sf::Color(37, 37, 37));
+        box.setOutlineColor(sf::Color(41, 16, 3,120));
         text.setFillColor(sf::Color(228, 221, 204));
     }
     else if (hover) {

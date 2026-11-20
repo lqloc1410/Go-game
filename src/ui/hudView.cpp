@@ -33,8 +33,8 @@ void hudView::draw(sf::RenderWindow& w, float panelX, int currentPlayer,
 
     float x = panelX + 24.f;
     if (!headline.empty()) {
-        text(fonts_.title_bold, headline, x, 30.f, 26, sf::Color(220, 200, 80));
-        if (!subline.empty()) text(fonts_.body, subline, x, 70.f, 18, sf::Color(220, 220, 220));
+        text(fonts_.title_bold, headline, x, 30.f, 26, sf::Color(255, 230, 150));
+        if (!subline.empty()) text(fonts_.title_bold, subline, x, 70.f, 24, sf::Color(252, 234, 174));
     }
     else if (gameOver) {
         text(fonts_.title_bold, "Game Over", x, 30.f, 28, sf::Color(255, 200, 80));
@@ -48,8 +48,8 @@ void hudView::draw(sf::RenderWindow& w, float panelX, int currentPlayer,
         text(fonts_.title_bold, currentPlayer == 1 ? "Turn: Black" : "Turn: White", x + 50.f, 32.f, 26);
     }
 
-    text(fonts_.body, "Black stones: "   + std::to_string(blackStones), x, 100.f, 20);
-    text(fonts_.body, "White stones: " + std::to_string(whiteStones), x, 130.f, 20);
+    text(fonts_.body, "Black stones: "   + std::to_string(blackStones), x, 130.f, 20);
+    text(fonts_.body, "White stones: " + std::to_string(whiteStones), x, 160.f, 20);
 
     float y = 220.f;
     for (auto& t : toasts_) { text(fonts_.body, t.text, x, y, 17, sf::Color(255, 230, 150)); y += 32.f; }

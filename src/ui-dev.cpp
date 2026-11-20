@@ -12,6 +12,12 @@
 #include "ui/menu.hpp"
 #include "ui/render.hpp"
 
+static std::string marginText(double s) {
+    std::ostringstream os;
+    os << std::fixed << std::setprecision(1) << (s > 0 ? s : -s);
+    return std::string(s > 0 ? "White" : "Black") + " leads by " + os.str();
+}
+
 int main() {
 
     sf::RenderWindow window(sf::VideoMode(1150, 800), "Go UI - dev");
@@ -63,20 +69,28 @@ int main() {
     if (!audio.load()) std::cerr << "Some audio failed to load" << '\n';
     auto stoneAt = [&](int x, int y) { return game.stoneAt(x, y); };
 
+    button resumeBtn("Resume play", {975.f, 400.f}, {260.f, 46.f}, fonts.body);
+    button doneBtn("Done", {975.f, 465.f}, {260.f, 46.f}, fonts.body);
+    Phase prevPhase = game.phase();
+
+
     // Báo kết quả đúng một lần khi ván vừa kết thúc
     bool over = false;
     auto checkEnd = [&] {
         
 
         EndgameStatus now = game.endgameStatus();
-        if (now == EndgameStatus::NotOver) over = false;
+    if (now == EndgameStatus::NotOver) {
+        over = false;
+    }
         if (over) return;
         if (now == EndgameStatus::Pass) {
             double s = game.score();
             std::ostringstream os;
             os << std::fixed << std::setprecision(1) << (s > 0 ? s : -s);
             hud.push(std::string(s > 0 ? "White" : "Black") + " wins by " + os.str() + " points", 8.f);
-        }else if (now == EndgameStatus::Resignation){
+        }
+        else if (now == EndgameStatus::Resignation){
             auto tmp = game.resignedPlayer();
             if (!tmp) return;
             
@@ -85,12 +99,14 @@ int main() {
             os << (resigned_player == Color::Black ? "White" : "Black");
             os << " wins by resignation.";
             hud.push(os.str());
-        }else return;
+        }
+        else return;
         over = true;
     };
 
     sf::Clock clock;
     bool hasSaveFile = std::filesystem::exists("./data/save.sgf");
+    
     while (window.isOpen()) {
         sf::Event e;
         while (window.pollEvent(e)) {
@@ -111,7 +127,7 @@ int main() {
                         game.newGame(cfg.boardSize, 7.5, 0); //mchau nho implement handicaps nhe :3
                         board.setBoardSize(cfg.boardSize);
                         board.setHover(std::nullopt);
-                        over = false;
+                        
                         gameStarted = true;
                         screen = screen::Game;
                         break;
@@ -147,73 +163,107 @@ int main() {
             }
 
             if (e.type == sf::Event::MouseMoved)
-                board.setHover(board.pixelToGrid(mouse));
+                board.setHover(game.phase() == Phase::Playing ? board.pixelToGrid(mouse) : std::nullopt);
 
             if (e.type == sf::Event::MouseButtonPressed && e.mouseButton.button == sf::Mouse::Left) {
-                if (auto p = board.pixelToGrid(mouse)) {
-                    MoveInfo m = game.play(p->x, p->y);
-                    switch (m.result) {
-                        case MoveStatus::Success:
-                            if (m.captured > 0) {
-                                hud.push("Captured " + std::to_string(m.captured) + " stones!");
-                                audio.playCapture();
+                switch (game.phase()) {
+                    case Phase::Marking:
+                        if (doneBtn.contains(mouse)) game.score();
+                        else if (resumeBtn.contains(mouse)) {
+                            game.resumePlay();
+                            hud.push("Back to play");
+                        }
+                        else if (auto p = board.pixelToGrid(mouse)) game.toggleDeadGroup(p -> x, p -> y);
+                        break;
+                    case Phase::Playing:
+                        if (auto p = board.pixelToGrid(mouse)) {
+                        MoveInfo m = game.play(p->x, p->y);
+                        switch (m.result) {
+                            case MoveStatus::Success:
+                                if (m.captured > 0) {
+                                    hud.push("Captured " + std::to_string(m.captured) + " stones!");
+                                    audio.playCapture();
+                                }
+                                else audio.playStone();                            
+                                break;
+                            case MoveStatus::Occupied: 
+                                hud.push("That point is already occupied!");
+                                audio.playError(); 
+                                break;
+                            case MoveStatus::Ko:  
+                                hud.push("Ko/Superko violation!");
+                                audio.playError(); 
+                                break;
+                            case MoveStatus::Suicide:  
+                                hud.push("Suicide is not allowed!");
+                                audio.playError(); 
+                                break;
+                            case MoveStatus::GameEnded: 
+                                hud.push("The game is over!"); 
+                                audio.playError();
+                                break;
+                            case MoveStatus::OutOfBounds:  
+                                hud.push("Out of bounds!");
+                                audio.playError(); 
+                                break;
+                            case MoveStatus::InvalidCommand:  
+                                hud.push("Unknown command. Try again!");
+                                audio.playError(); 
+                                break;
+                            default: break;
                             }
-                            else audio.playStone();                            
-                            break;
-                        case MoveStatus::Occupied: 
-                            hud.push("That point is already occupied!");
-                            audio.playError(); 
-                            break;
-                        case MoveStatus::Ko:  
-                            hud.push("Ko/Superko violation!");
-                            audio.playError(); 
-                            break;
-                        case MoveStatus::Suicide:  
-                            hud.push("Suicide is not allowed!");
-                            audio.playError(); 
-                            break;
-                        case MoveStatus::GameEnded: 
-                            hud.push("The game is over!"); 
-                            audio.playError();
-                            break;
-                        case MoveStatus::OutOfBounds:  
-                            hud.push("Out of bounds!");
-                            audio.playError(); 
-                            break;
-                        case MoveStatus::InvalidCommand:  
-                            hud.push("Unknown command. Try again!");
-                            audio.playError(); 
-                            break;
-                        default: break;
-                    }
-                    checkEnd();
+                        }
+                        break;
+                    case Phase::Finished: 
+                        break;
                 }
             }
+              
+        
 
             if (e.type == sf::Event::KeyPressed) {
                 switch (e.key.code) {
                     case sf::Keyboard::Escape: screen = screen::Menu; if (!game.isGameOver()) game.save(); break;
                     case sf::Keyboard::P: {
-                        int who = game.currentPlayer();
-                        if (game.pass()) hud.push(who == 1 ? "Black passed." : "White passed.");
+                        if (game.phase() == Phase::Playing) {
+                            int who = game.currentPlayer();
+                            if (game.pass()) hud.push(who == 1 ? "Black passed." : "White passed.");
+                        }
                         break;
                     }
-                    case sf::Keyboard::Left: if (!game.undo()) hud.push("Nothing to undo!"); break;
-                    case sf::Keyboard::Right: if (!game.redo()) hud.push("Nothing to redo!"); break;
+                    case sf::Keyboard::Left: 
+                        if (game.phase() == Phase::Playing) {
+                            if (!game.undo()) hud.push("Nothing to undo!");
+                        }
+                        break;
+                    case sf::Keyboard::Right: 
+                        if (game.phase() == Phase::Playing) {
+                            if (!game.redo()) hud.push("Nothing to redo!"); 
+                        }
+                        break;
                     case sf::Keyboard::N: game.newGame(); hud.push("Board reset!"); break;
                     case sf::Keyboard::R: if (!game.resign()) hud.push("The game is already over!"); break;
                     case sf::Keyboard::S: if (game.save()) hud.push("Game saved!"); else hud.push("Save failed! Try again."); break;
                     default: break;
                 }
-                checkEnd();
             }
         }
 
         sf::Vector2f mouseNow = window.mapPixelToCoords(sf::Mouse::getPosition(window));
-        if (screen == screen::Menu) {
-            bool canResume = (gameStarted && !game.isGameOver()) || (!gameStarted && hasSaveFile);
-            menu.update(mouseNow, canResume);
+        game.syncPhase();
+        Phase ph = game.phase();
+        if (ph != prevPhase) {
+            if (ph == Phase::Marking)
+                hud.push("Both players passed.\nClick a group to mark it dead.", 12.f);
+            prevPhase = ph;
         }
+        bool marking = (ph == Phase::Marking);
+        resumeBtn.setHover(marking && resumeBtn.contains(mouseNow));
+        doneBtn.setHover(marking && doneBtn.contains(mouseNow));
+        
+        bool canResume = (gameStarted && game.phase() != Phase::Finished);
+        menu.update(mouseNow, canResume);
+
         hud.update(clock.restart().asSeconds());
 
         window.clear(sf::Color(40, 40, 40));
@@ -234,14 +284,40 @@ int main() {
                 textCentered(window, "(Press Esc to go back)", fonts.body, 26, {575.f, 380.f}, sf::Color(121, 84, 52));
                 break;
 
-            case screen::Game:
+            case screen::Game: {
+                Phase dp = game.phase();
+                std::string headline, subline;
+                if (dp == Phase::Marking) {
+                    headline = "Mark dead stones";
+                    subline = marginText(game.score());
+                }
+                else if (dp == Phase::Finished) {
+                    if (auto who = game.resignedPlayer()) {
+                        subline = (*who == Color::Black) ? "Black resigned" : "White resigned";
+                        headline = (*who == Color::Black) ? "White wins" : "Black wins";
+                    }
+                    else {
+                        double s = game.score();
+                        headline = (s > 0) ? "White wins" : "Black wins";
+                        subline = marginText(s);
+                    }
+                }
                 std::optional<GridPos> last;
                 if (auto m = game.lastMove()) last = GridPos{m -> first, m -> second};
+                auto isDead = [&](int x, int y) {
+                    return game.isDeadStone(x, y);
+                };
 
-                board.draw(window, stoneAt, game.currentPlayer(), last);
-                hud.draw(window, 800.f, game.currentPlayer(), game.isGameOver(), game.blackStones(), game.whiteStones());
+                board.draw(window, stoneAt, game.currentPlayer(), last, isDead);
+                hud.draw(window, 800.f, game.currentPlayer(), game.isGameOver(), game.blackStones(), game.whiteStones(), headline, subline);
+                
+                if (dp == Phase::Marking) {
+                    resumeBtn.draw(window);
+                    doneBtn.draw(window);
+                }
                 break;
-        }
+            }
+        }   
         window.display();
     }
 }
