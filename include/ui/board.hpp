@@ -37,7 +37,8 @@ public:
     void draw(sf::RenderWindow& w,
               const std::function<int(int, int)>& stoneAt,
               int currentPlayer,
-              std::optional<GridPos> lastMove = std::nullopt) const;
+              std::optional<GridPos> lastMove = std::nullopt,
+              const std::function<bool(int, int)>& isDead = nullptr) const;
 
 private:
     void recompute();

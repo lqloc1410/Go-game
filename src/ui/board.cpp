@@ -53,7 +53,8 @@ static std::vector<GridPos> starPoints(int n) {
 void BoardView::draw(sf::RenderWindow& w,
                      const std::function<int(int, int)>& stoneAt,
                      int currentPlayer, 
-                     std::optional<GridPos> lastMove) const {
+                     std::optional<GridPos> lastMove, 
+                     const std::function<bool(int, int)>& isDead) const {
     // // 1) nền gỗ
     // sf::Texture wood;
     // wood.loadFromFile("assets/image/wooden.jpg");
@@ -93,15 +94,34 @@ void BoardView::draw(sf::RenderWindow& w,
     float r = cell_ * 0.46f;
     sf::CircleShape stone(r);
     stone.setOrigin(r, r);
+
+    auto drawCross = [&](sf::Vector2f p, sf::Color c) {
+        float len = r * 1.1f, thick = std::max(2.f, r  0.12f);
+        for (float angle : {45.f, -45.f}) {
+            sf::RectangleShape bar({len, thick});
+            bar.setOrigin(len / 2.f, thich / 2.f);
+            bar.setPosition(p);
+            bar.setRotation(angle);
+            bar.setFillColor(c);
+            w.draw(bar);
+        }
+    }
+
     for (int y = 0; y < n_; ++y)
         for (int x = 0; x < n_; ++x) {
-            int s = stoneAt(x, y);
-            if (s == 0) continue;
+            int who = stoneAt(x, y);
+            if (who == 0) continue;
+            bool dead = isDead && isDead(x, y);
+
+            if (dead) c.a = 110; //fade
+
             stone.setPosition(gridToPixel(x, y));
-            stone.setFillColor(s == 1 ? sf::Color(20, 20, 20) : sf::Color(245, 245, 245));
+            stone.setFillColor(who == 1 ? sf::Color(20, 20, 20) : sf::Color(245, 245, 245));
             stone.setOutlineThickness(1.f);
-            stone.setOutlineColor(sf::Color(0, 0, 0, 120));
+            stone.setOutlineColor(sf::Color(0, 0, 0, dead ? 60 : 120));
             w.draw(stone);
+
+            if (dead) drawCross(gridToPixel((x, y), sf::Color(220, 60, 60)));
         }
 
     // 5) quân mờ khi rê chuột vào ô trống
