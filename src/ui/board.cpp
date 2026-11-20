@@ -170,12 +170,22 @@ void BoardView::rebuildStatic() const {
     }
     staticTex_.draw(bg);
 
-    sf::VertexArray lines(sf::Lines);
+    //redraw the grid
+    const float th  = std::max(1.5f, cell_ * 0.045f);    
+    const float thB = th * 1.2f;                          
+    auto addLine = [&](sf::Vector2f a, sf::Vector2f b, bool horizontal, float t) {
+        sf::RectangleShape bar;
+        if (horizontal) { bar.setSize({b.x - a.x + thB, t}); bar.setOrigin(thB / 2.f, t / 2.f); }
+        else            { bar.setSize({t, b.y - a.y + thB}); bar.setOrigin(t / 2.f, thB / 2.f); }
+        bar.setPosition(a);
+        bar.setFillColor(style.lineColor);
+        staticTex_.draw(bar);
+    };
     for (int i = 0; i < n_; ++i) {
-        lines.append({P(0, i), style.lineColor});  lines.append({P(n_ - 1, i), style.lineColor});
-        lines.append({P(i, 0), style.lineColor});  lines.append({P(i, n_ - 1), style.lineColor});
+        float t = (i == 0 || i == n_ - 1) ? thB : th;      
+        addLine(P(0, i), P(n_ - 1, i), true,  t);      
+        addLine(P(i, 0), P(i, n_ - 1), false, t);        
     }
-    staticTex_.draw(lines);
 
     const float starR = cell_ * 0.12f;
     for (auto s : starPoints(n_)) {
