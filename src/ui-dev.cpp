@@ -197,7 +197,7 @@ int main() {
                         placeholderTitle = "Saved game";
                         screen = screen::Placeholder;
                         break;
-                    case menuAction::settings:
+                    case menuAction::Settings:
                         placeholderTitle = "Settings";
                         screen = screen::Placeholder;
                         break;
@@ -349,6 +349,10 @@ int main() {
         
         bool canResume = (gameStarted && game.phase() != Phase::Finished);
         menu.update(mouseNow, canResume);
+        if (menu.takeSettingsChanged()) {
+            audio.setMusicOn(cfg.bgmOn);
+            audio.setSfxVolume(cfg.sfxOn ? 70.f : 0.f);
+        }
 
         hud.update(clock.restart().asSeconds());
 
