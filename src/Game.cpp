@@ -1,6 +1,7 @@
 #include <GameLogic.hpp>
 #include <GameParser.hpp>
 #include <Game.hpp>
+#include <AI.hpp>
 namespace fs = std::filesystem;
 
 std::string Game::to_sgf() const{
@@ -70,7 +71,7 @@ std::string Game::to_sgf() const{
 Game::Game(int board_size, double komi, int handicap){
     if (board_size < 2 || board_size > MAX_BOARD_WIDTH) throw std::invalid_argument("Board size must be between 2 and MAX_BOARD_WIDTH");
     else if (handicap < 0 || handicap == 1) throw std::invalid_argument("Invalid handicap count.");
-    board = Board(board_size, komi);
+    board = Board(board_size, komi, handicap);
     Color start_turn = (handicap >= 2) ? Color::White : Color::Black;
     history = HistoryTracker(handicap, start_turn);
 }
@@ -84,6 +85,51 @@ bool Game::load_from_file(const std::string &filepath){
 
     log = std::move(log_tmp);
     has_data = true;
+    if (is_game_over() == EndgameStatus::Pass && !board.has_dead_stones()) {
+        auto_mark_dead_stones();
+    }
+    return true;
+}
+
+static void mark_dead_roots_on(Board& b, Color turn, int rollout_cnt) {
+    b.clear_dead();
+    for (int16_t root : get_dead_group_roots(b, turn, rollout_cnt)) {
+        if (!b.is_dead_stone(root)) {
+            b.toggle_dead_group(root);
+        }
+    }
+}
+
+void Game::auto_mark_dead_stones(int rollout_cnt) {
+    mark_dead_roots_on(board, get_turn(), rollout_cnt);
+}
+
+double Game::estimate_score(int rollout_cnt) const {
+    if (is_game_over() == EndgameStatus::Pass || board.has_dead_stones()) {
+        return board.calculate_score();
+    }
+    Board tmp = board;
+    mark_dead_roots_on(tmp, get_turn(), rollout_cnt);
+    return tmp.calculate_score();
+}
+
+bool Game::pass() {
+    return pass(history.get_turn());
+}
+
+bool Game::pass(Color color) {
+    if (!history.pass(color)) return false;
+    if (is_game_over() == EndgameStatus::Pass) {
+        auto_mark_dead_stones();
+    }
+    return true;
+}
+
+bool Game::redo() {
+    if (!history.redo_move(board)) return false;
+    if (is_game_over() == EndgameStatus::Pass && !board.has_dead_stones()) {
+        auto_mark_dead_stones();
+    }
     return true;
 }
 
@@ -92,25 +138,63 @@ MoveStatus Game::play_move(int16_t id) {
     return history.play_move(board, id, history.get_turn());
 }
 
+MoveStatus Game::play_move(int16_t id, Color color) {
+    if (is_game_over() != EndgameStatus::NotOver) return MoveStatus::GameEnded;
+    return history.play_move(board, id, color);
+}
+
 bool Game::save() const {
+    return save((save_folder / save_file).string());
+}
+
+bool Game::save(const std::string &filepath) const {
+    if (filepath.empty()) return false;
+
     try {
         std::error_code ec;
-        fs::create_directories(save_folder, ec);
-        if (ec) return false;
+        fs::path target_path(filepath);
+        const fs::path filename = target_path.filename();
+        if (filename.empty() || filename == "." || filename == ".." || fs::is_directory(target_path, ec)) {
+            return false;
+        }
+        ec.clear();
 
-        fs::path target_path = save_folder / save_file;
-        fs::path temp_path = save_folder / tmp_file;
+        if (!target_path.has_extension()) {
+            target_path += ".sgf";
+            if (fs::is_directory(target_path, ec)) {
+                return false;
+            }
+            ec.clear();
+        }
 
-        std::ofstream out(temp_path);
-        if (!out.is_open()) return false;
+        if (target_path.has_parent_path()) {
+            fs::create_directories(target_path.parent_path(), ec);
+            if (ec) return false;
+        }
 
-        out << to_sgf();
-        out.close();
-        if (!out.good()) return false;
+        fs::path temp_path = target_path;
+        temp_path += ".tmp";
+
+        {
+            std::ofstream out(temp_path);
+            if (!out.is_open()) return false;
+
+            out << to_sgf();
+            out.close();
+            if (!out.good()) {
+                std::error_code cleanup_ec;
+                fs::remove(temp_path, cleanup_ec);
+                return false;
+            }
+        }
 
         // Atomically replace target file
         fs::rename(temp_path, target_path, ec);
-        if (ec) return false;
+        if (ec) {
+            std::error_code cleanup_ec;
+            fs::remove(temp_path, cleanup_ec);
+            return false;
+        }
 
         return true;
     } catch (...) {
