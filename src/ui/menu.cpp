@@ -135,7 +135,8 @@ void menuView::onSettingsClick(int i) {
             settingsChanged = true;
             break;
         case 4: // Cycle Rule Set (Japanese -> Chinese -> AGA)
-            cfg.rules = static_cast<ruleSet>((static_cast<int>(cfg.rules) + 1) % 3);
+            auto nextRule = static_cast<ruleSet>((static_cast<int>(cfg.rules) + 1) % 3);
+            cfg.setRuleSet(nextRule);
             settingsChanged = true;
             break;
         case 5: // Reset

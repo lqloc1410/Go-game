@@ -119,7 +119,7 @@ int main() {
     };
 
     auto startNewGame = [&] {
-        game.newGame(cfg.boardSize, 7.5, 0); //mchau nho implement handicaps nhe :3
+        game.newGame(cfg.boardSize, cfg.komi, cfg.handicap); //mchau nho implement handicaps nhe :3
         board.setBoardSize(cfg.boardSize);
         board.setHover(std::nullopt);
         viewingFinalBoard = false;
