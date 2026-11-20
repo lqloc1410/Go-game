@@ -10,7 +10,8 @@ public:
     void push(const std::string& utf8, float seconds = 2.5f);
     void update(float dt);
     void draw(sf::RenderWindow& w, float panelX, int currentPlayer,
-              bool gameOver, int blackStones, int whiteStones) const;
+              bool gameOver, int blackStones, int whiteStones,
+              const std::string& headline = "", const std::string& subline = "") const;
 private:
     struct Toast { std::string text; float left; };
     const Fonts& fonts_;

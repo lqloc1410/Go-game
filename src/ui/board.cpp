@@ -96,34 +96,35 @@ void BoardView::draw(sf::RenderWindow& w,
     stone.setOrigin(r, r);
 
     auto drawCross = [&](sf::Vector2f p, sf::Color c) {
-        float len = r * 1.1f, thick = std::max(2.f, r  0.12f);
+        float len = r * 1.1f, thick = std::max(2.f, r * 0.12f);
         for (float angle : {45.f, -45.f}) {
             sf::RectangleShape bar({len, thick});
-            bar.setOrigin(len / 2.f, thich / 2.f);
+            bar.setOrigin(len / 2.f, thick / 2.f);
             bar.setPosition(p);
             bar.setRotation(angle);
             bar.setFillColor(c);
             w.draw(bar);
         }
-    }
+    };
 
-    for (int y = 0; y < n_; ++y)
+    for (int y = 0; y < n_; ++y) 
         for (int x = 0; x < n_; ++x) {
             int who = stoneAt(x, y);
             if (who == 0) continue;
             bool dead = isDead && isDead(x, y);
 
+            sf::Color c = (who == 1 ? sf::Color(20, 20, 20) : sf::Color(245, 245, 245));
             if (dead) c.a = 110; //fade
 
             stone.setPosition(gridToPixel(x, y));
-            stone.setFillColor(who == 1 ? sf::Color(20, 20, 20) : sf::Color(245, 245, 245));
+            stone.setFillColor(c);
             stone.setOutlineThickness(1.f);
             stone.setOutlineColor(sf::Color(0, 0, 0, dead ? 60 : 120));
             w.draw(stone);
 
-            if (dead) drawCross(gridToPixel((x, y), sf::Color(220, 60, 60)));
+            if (dead) drawCross(gridToPixel(x, y), sf::Color(220, 60, 60));
         }
-
+    
     // 5) quân mờ khi rê chuột vào ô trống
     if (hover_ && stoneAt(hover_->x, hover_->y) == 0) {
         stone.setPosition(gridToPixel(hover_->x, hover_->y));

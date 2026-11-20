@@ -16,7 +16,8 @@ void hudView::update(float dt) {
 }
 // AI-assisted: see AI20. AI35
 void hudView::draw(sf::RenderWindow& w, float panelX, int currentPlayer,
-                   bool gameOver, int blackStones, int whiteStones) const {
+                   bool gameOver, int blackStones, int whiteStones, 
+                   const std::string& headline, const std::string& subline) const {
     auto text = [&](const sf::Font& font, const std::string& s, float x, float y,
                     unsigned size, sf::Color c = sf::Color::White) {
         sf::Text t(u8(s), font, size);
@@ -31,7 +32,11 @@ void hudView::draw(sf::RenderWindow& w, float panelX, int currentPlayer,
     w.draw(panel);
 
     float x = panelX + 24.f;
-    if (gameOver) {
+    if (!headline.empty()) {
+        text(fonts_.title_bold, headline, x, 30.f, 26, sf::Color(220, 200, 80));
+        if (!subline.empty()) text(fonts_.body, subline, x, 70.f, 18, sf::Color(220, 220, 220));
+    }
+    else if (gameOver) {
         text(fonts_.title_bold, "Game Over", x, 30.f, 28, sf::Color(255, 200, 80));
     } else {
         sf::CircleShape s(18.f);
