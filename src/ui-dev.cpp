@@ -295,7 +295,13 @@ int main() {
 
             if (e.type == sf::Event::KeyPressed) {
                 switch (e.key.code) {
-                    case sf::Keyboard::Escape: screen = screen::Menu; if (!game.isGameOver()) game.save(); break;
+                    case sf::Keyboard::Escape: 
+                    screen = screen::Menu; 
+                    if (!game.isGameOver()) {
+                        game.save(); 
+                        hasSaveFile = true;
+                    }
+                    break;
                     case sf::Keyboard::P: {
                         if (game.phase() == Phase::Playing) {
                             int who = game.currentPlayer();
@@ -321,7 +327,13 @@ int main() {
                         hud.push("Board reset!"); 
                         break;
                     case sf::Keyboard::R: if (!game.resign()) hud.push("The game is already over!"); break;
-                    case sf::Keyboard::S: if (game.save()) hud.push("Game saved!"); else hud.push("Save failed! Try again."); break;
+                    case sf::Keyboard::S: 
+                        if (game.save()) {
+                            hud.push("Game saved!"); 
+                            hasSaveFile = true;
+                        }
+                        else hud.push("Save failed! Try again."); 
+                        break;
                     default: break;
                 }
             }
@@ -347,7 +359,7 @@ int main() {
         resumeBtn.setHover(marking && resumeBtn.contains(mouseNow));
         doneBtn.setHover(marking && doneBtn.contains(mouseNow));
         
-        bool canResume = (gameStarted && game.phase() != Phase::Finished);
+        bool canResume = (gameStarted && game.phase() != Phase::Finished || hasSaveFile);
         menu.update(mouseNow, canResume);
         if (menu.takeSettingsChanged()) {
             audio.setMusicOn(cfg.bgmOn);
