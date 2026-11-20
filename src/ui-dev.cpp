@@ -112,7 +112,7 @@ int main() {
     divider.setFillColor(sf::Color(200, 160, 90, 120));
     
     bool over = false;
-    
+    bool viewingFinalBoard = false;
 
     auto isDead = [&](int x, int y) {
         return game.isDeadStone(x, y);
@@ -122,6 +122,7 @@ int main() {
         game.newGame(cfg.boardSize, 7.5, 0); //mchau nho implement handicaps nhe :3
         board.setBoardSize(cfg.boardSize);
         board.setHover(std::nullopt);
+        viewingFinalBoard = false;
         over = false;
         gameStarted = true;
         screen = screen::Game;
@@ -217,16 +218,20 @@ int main() {
             if (screen == screen::GameOver) {
                 if (e.type == sf::Event::MouseButtonPressed && e.mouseButton.button == sf::Mouse::Left) {
                     if (goNewBtn.contains(mouse)) {
+                        viewingFinalBoard = false;
                         startNewGame();
                     } 
                     else if (goViewBtn.contains(mouse)) {
+                        viewingFinalBoard = true;
                         screen = screen::Game;   
                     }
                     else if (goMenuBtn.contains(mouse)) {
+                        viewingFinalBoard = false;
                         screen = screen::Menu;
                     }
                 }
                 if (e.type == sf::Event::KeyPressed && e.key.code == sf::Keyboard::Escape) {
+                    viewingFinalBoard = false;
                     screen = screen::Menu;
                 }
                 continue;
@@ -310,6 +315,7 @@ int main() {
                         break;
                     case sf::Keyboard::N: 
                         game.newGame(); 
+                        viewingFinalBoard = false;
                         over = false;
                         prevPhase = game.phase();
                         hud.push("Board reset!"); 
@@ -326,9 +332,10 @@ int main() {
         if (ph != prevPhase) {
             std::cout << "phase " << static_cast<int>(prevPhase) << " -> " << static_cast<int>(ph) << "\n";   // temporary
             if (ph == Phase::Marking) {
+                viewingFinalBoard = false;
                 hud.push("Both players passed.\nClick the stone to mark dead.", 4.f);
             }
-            if (ph == Phase::Finished && screen == screen::Game) screen = screen::GameOver;
+            if (ph == Phase::Finished && screen == screen::Game && !viewingFinalBoard) screen = screen::GameOver;
             prevPhase = ph;
         }
         if (screen == screen::GameOver) {
