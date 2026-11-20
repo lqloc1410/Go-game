@@ -342,7 +342,7 @@ int main() {
         game.syncPhase();
         Phase ph = game.phase();
         if (ph != prevPhase) {
-            std::cout << "phase " << static_cast<int>(prevPhase) << " -> " << static_cast<int>(ph) << "\n";   // temporary
+            // std::cout << "phase " << static_cast<int>(prevPhase) << " -> " << static_cast<int>(ph) << "\n";   // temporary
             if (ph == Phase::Marking) {
                 viewingFinalBoard = false;
                 hud.push("Both players passed.\nClick the stone to mark dead.", 4.f);

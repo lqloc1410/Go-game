@@ -53,11 +53,11 @@ namespace {
 
     const char* ruleName(ruleSet r) {
         switch (r) {
-            case ruleSet::Japanese: return "Japanese";
+            case ruleSet::Japanese: return "Japanese (Experimental)";
             case ruleSet::Chinese:  return "Chinese";
-            case ruleSet::AGA:      return "AGA";
+            case ruleSet::AGA:      return "AGA (Experimental)";
         }
-        return "Japanese";
+        return "Chinese";
     }
 }
 
@@ -134,7 +134,7 @@ void menuView::onSettingsClick(int i) {
             cfg.stones = static_cast<stoneStyle>((static_cast<int>(cfg.stones) + 1) % 3);
             settingsChanged = true;
             break;
-        case 4: // Cycle Rule Set (Japanese -> Chinese -> AGA)
+        case 4: // Cycle Rule Set (Chinese -> Japanese -> AGA)
             cfg.setRuleSet(static_cast<ruleSet>((static_cast<int>(cfg.rules) + 1) % 3));
             settingsChanged = true;
             break;
