@@ -47,6 +47,14 @@ public:
     const HistoryTracker& get_history() const { return history; }
     const GameLog& get_log() const { return log; }
 
+    bool get_is_ai() const { return log.get_is_ai(); }
+    Difficulty get_ai_difficulty() const { return log.get_difficulty(); }
+    std::string get_ai_difficulty_str() const { return log.get_difficulty_str(); }
+    Color get_ai_color() const { return log.get_ai_color(); }
+    void set_ai_config(bool ai, Difficulty diff = Difficulty::Hard, Color ai_color = Color::White) {
+        log.set_ai_config(ai, diff, ai_color);
+    }
+
     void display() const{board.display();}
 
     MoveStatus place_setup(int16_t id, Color color){

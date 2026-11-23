@@ -19,6 +19,12 @@ std::string ruleset_to_string(Ruleset ruleset){
     else return "Other";
 }
 
+std::string difficulty_to_string(Difficulty diff){
+    if (diff == Difficulty::Easy) return "Easy";
+    else if (diff == Difficulty::Medium) return "Medium";
+    else return "Hard";
+}
+
 // AI-generated
 std::string GameResult::to_sgf_string() const {
     if (reason == ResultType::Draw) return "Draw";
@@ -283,6 +289,54 @@ bool GameLog::handle_property(const std::string &tag, const std::vector<std::str
         if (p == "B" || p == "b") {starting_player = Color::Black; set_with_PL = true;}
         else if (p == "W" || p == "w") {starting_player = Color::White; set_with_PL = true;}
         else return false;
+    } else if (tag == "AI"){
+        // if missing or the tag is empty, assume PvP
+
+        if (moves_list.size() != 0) return false;
+        if (vals.size() != 1) return false;
+        if (vals[0].empty()) return true;
+
+        std::string p = strip(vals[0]);
+        std::transform(p.begin(), p.end(), p.begin(),
+            [](unsigned char ch) {
+                return static_cast<char>(std::tolower(ch));
+            });
+
+        if (p.empty()) return true;
+        if (p == "yes" || p == "y") isAI = true;
+        else if (p == "no" || p == "n") isAI = false;
+        else return false;
+    } else if (tag == "DF"){
+        // if missing or tag is empty, assume Hard
+
+        if (moves_list.size() != 0) return false;
+        if (vals.size() != 1) return false;
+        if (vals[0].empty()) return true;
+
+        std::string p = strip(vals[0]);
+        std::transform(p.begin(), p.end(), p.begin(),
+            [](unsigned char ch) {
+                return static_cast<char>(std::tolower(ch));
+            });
+        
+        if (p.empty()) return true;
+        if (p == "easy" || p == "e") difficulty = Difficulty::Easy;
+        else if (p == "medium" || p == "m") difficulty = Difficulty::Medium;
+        else if (p == "hard" || p == "h") difficulty = Difficulty::Hard;
+        else return false; 
+    } else if (tag == "AC"){
+        // if missing or tag is empty, assume White
+
+        if (moves_list.size() != 0) return false;
+        if (vals.size() != 1) return false;
+        if (vals[0].empty()) return true;
+
+        std::string p = strip(vals[0]);
+
+        if (p.empty()) return true;
+        if (p == "B" || p == "b") {AIColor = Color::Black;}
+        else if (p == "W" || p == "w") {AIColor = Color::White;}
+        else return false; 
     }
     return true;
 }
@@ -398,6 +452,11 @@ std::ostream& operator<<(std::ostream& os, const GameLog &log){
     os << "File Format: " << log.FileFormat << '\n';
     os << "Game Mode: " << log.GameMode << '\n';
     os << "Ruleset: " << ruleset_to_string(log.ruleset) << '\n';
+    os << "AI Mode: " << (log.isAI ? "Yes" : "No") << '\n';
+    if (log.isAI) {
+        os << "AI Difficulty: " << difficulty_to_string(log.difficulty) << '\n';
+        os << "AI Color: " << (log.AIColor == Color::Black ? "Black" : "White") << '\n';
+    }
     os << "Board Size: " << log.BoardSize << '\n';
     os << "Black: " << log.PlayerBlack << '\n';
     os << "White: " << log.PlayerWhite << '\n';

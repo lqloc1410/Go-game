@@ -47,6 +47,11 @@ std::string Game::to_sgf() const{
     }
     
     ss << "PL[" << (history.get_start_turn() == Color::Black ? "B" : "W") << "]";
+    ss << "AI[" << (log.get_is_ai() ? "yes" : "no") << "]";
+    if (log.get_is_ai()) {
+        ss << "DF[" << log.get_difficulty_str() << "]";
+        ss << "AC[" << (log.get_ai_color() == Color::Black ? "B" : "W") << "]";
+    }
 
     ss << "\n";
 
