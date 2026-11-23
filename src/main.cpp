@@ -834,6 +834,21 @@ int main(int argc, char* argv[]) {
     bool bot_vs_bot = false;
     int ai_time_ms = 1000;
 
+    auto sync_ai_from_game = [&]() {
+        bot_vs_bot = false;
+        if (game.get_is_ai()) {
+            auto_ai_color = game.get_ai_color();
+            switch (game.get_ai_difficulty()) {
+                case Difficulty::Easy:   ai_time_ms = 100; break;
+                case Difficulty::Medium: ai_time_ms = 500; break;
+                case Difficulty::Hard:   ai_time_ms = 3000; break;
+            }
+        } else {
+            auto_ai_color = std::nullopt;
+        }
+    };
+    sync_ai_from_game();
+
     // AI-assisted: see AI78 - persistent MCTS instance across turns for tree reuse
     std::unique_ptr<MCTSThreads> mcts = nullptr;
 
@@ -991,6 +1006,7 @@ int main(int argc, char* argv[]) {
             }
             bot_vs_bot = true;
             auto_ai_color = std::nullopt;
+            game.set_ai_config(false);
             mcts.reset();
             std::cout << ">> Bot-vs-Bot started (" << ai_time_ms << " ms per move).\n";
             play_ai_turn(turn, ai_time_ms);
@@ -1025,6 +1041,7 @@ int main(int argc, char* argv[]) {
                 Game temp_game;
                 if (temp_game.load_from_file(path)) {
                     game = std::move(temp_game);
+                    sync_ai_from_game();
                     mcts.reset();
                     std::cout << ">> Successfully loaded: " << path << "\n";
                     std::cout << game.get_log() << "\n";
@@ -1067,12 +1084,15 @@ int main(int argc, char* argv[]) {
                 std::string arg = (cmd_lower.size() > 5) ? strip(cmd_lower.substr(5)) : "w";
                 if (arg == "off" || arg == "none" || arg == "pvp") {
                     auto_ai_color = std::nullopt;
+                    game.set_ai_config(false);
                     std::cout << ">> PvAI disabled (PvP mode).\n";
                 } else if (arg == "b" || arg == "black") {
                     auto_ai_color = Color::Black;
+                    game.set_ai_config(true, Difficulty::Hard, Color::Black);
                     std::cout << ">> PvAI enabled: AI playing as Black (X).\n";
                 } else {
                     auto_ai_color = Color::White;
+                    game.set_ai_config(true, Difficulty::Hard, Color::White);
                     std::cout << ">> PvAI enabled: AI playing as White (O).\n";
                 }
             } else {
