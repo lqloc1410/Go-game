@@ -21,4 +21,10 @@ katago/
 bot-versions/
 training-data/
 gtp_logs/
+training-data/
+data/
+demo/
+gnugo-3.8/
+gtp_logs/
+katago/
 sample-games/
