@@ -2,6 +2,7 @@
 #include "ui/render.hpp"
 #include <cmath>
 #include <algorithm>
+#include "ui/theme.hpp"
 
 // AI-assisted: see AI43, AI44
 
@@ -35,20 +36,20 @@ namespace {
 
     const char* themeName(boardTheme t) {
         switch (t) {
-            case boardTheme::Classic: return "Classic";
-            case boardTheme::Bamboo:      return "Bamboo (WIP)";
-            case boardTheme::Slate:       return "Slate (WIP)";
+            case boardTheme::zen: return "Zen";
+            case boardTheme::sumie:      return "Sumi-e";
+            case boardTheme::dark:       return "Dark mode";
         }
-        return "Classic";
+        return "Zen";
     }
 
     const char* stoneName(stoneStyle s) {
         switch (s) {
-            case stoneStyle::Classic:       return "Classic";
-            case stoneStyle::SlateAndShell: return "Slate & Shell (WIP)";
-            case stoneStyle::Modern:        return "Modern (WIP)";
+            case stoneStyle::zen:       return "Zen";
+            case stoneStyle::sumie: return "Sumi-e";
+            case stoneStyle::dark:        return "Dark";
         }
-        return "Classic";
+        return "Zen";
     }
 
     const char* ruleName(ruleSet r) {
@@ -254,6 +255,7 @@ void menuView::update(sf::Vector2f mouse, bool canResume) {
 }
 
 void menuView::drawSettingsPopup(sf::RenderWindow& w) {
+    const theme& th = themeManager::instance().current();
     // 1. Dimmed full-view backdrop
     sf::RectangleShape dim(sf::Vector2f(w.getView().getSize()));
     dim.setFillColor(sf::Color(0, 0, 0, 140));
@@ -264,32 +266,34 @@ void menuView::drawSettingsPopup(sf::RenderWindow& w) {
     sf::ConvexShape box = roundedRect(boxSize, 24.f, 12);
     box.setOrigin(boxSize.x * 0.5f, boxSize.y * 0.5f);
     box.setPosition(575.f, 405.f);
-    box.setFillColor(sf::Color(242, 232, 213, 248)); // warm parchment tone
+    box.setFillColor(withAlpha(th.hudPanel, 245));
     box.setOutlineThickness(3.f);
-    box.setOutlineColor(sf::Color(92, 62, 34));
+    box.setOutlineColor(th.accent);
     w.draw(box);
 
     // 3. Popup title & buttons
-    textCentered(w, "SETTINGS", fonts.title_bold, 38, {575.f, 195.f}, sf::Color(55, 36, 20));
+    textCentered(w, "SETTINGS", fonts.title_bold, 38, {575.f, 195.f}, th.accent);
 
     for (auto& b : settingsBtns) b.draw(w);
 }
 
 void menuView::draw(sf::RenderWindow& w) {
-    textCentered(w, "GO", fonts.game_title, 130, {575.f, 150.f}, sf::Color(44, 38, 30));
-    textCentered(w, "Master your Go board", fonts.body_decor, 48, {575.f, 250.f}, sf::Color(55, 36, 20));
+    const theme& th = themeManager::instance().current();
+
+    textCentered(w, "GO", fonts.game_title, 130, {575.f, 150.f}, th.accent);
+    textCentered(w, "Master your Go board", fonts.body_decor, 48, {575.f, 250.f}, th.textPrimary);
     
     const char* header = nullptr;
     if (page == page::Mode) header = "Select game mode";
     else if (page == page::Difficulty) header = "Select difficulty";
     else if (page == page::boardSize) header = "Select board size";
     
-    if (header) textCentered(w, header, fonts.body, 26, {575.f, 320.f}, sf::Color(57, 24, 9));
+    if (header) textCentered(w, header, fonts.body, 26, {575.f, 320.f}, mixColor(th.windowBg, th.textPrimary, 0.65f));
     
     for (auto& b : active()) b.draw(w);
 
     if (page == page::Mode || page == page::Difficulty) {
-        textCentered(w, "Current: " + modeText(), fonts.body, 18, {575.f, 720.f}, sf::Color(160, 160, 165));
+        textCentered(w, "Current: " + modeText(), fonts.body, 18, {575.f, 720.f}, th.textPrimary);
     }
 
     if (settingsOpen) {

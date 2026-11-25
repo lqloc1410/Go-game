@@ -1,5 +1,6 @@
 #include "ui/hudView.hpp"
 #include "ui/layout.hpp"
+#include "ui/theme.hpp"
 
 static sf::String u8(const std::string& s) {
     return sf::String::fromUtf8(s.begin(), s.end());
@@ -20,8 +21,11 @@ void hudView::update(float dt) {
 void hudView::draw(sf::RenderWindow& w, float panelX, int currentPlayer,
                    bool gameOver, int blackStones, int whiteStones, 
                    const std::string& headline, const std::string& subline) const {
+    const theme& th = themeManager::instance().current();
+    const sf::Color muted  = mixColor(th.hudPanel, th.textPrimary, 0.55f);
+    
     auto text = [&](const sf::Font& font, const std::string& s, float x, float y,
-                    unsigned size, sf::Color c = sf::Color::White) {
+    unsigned size, sf::Color c = sf::Color::White) {
         sf::Text t(u8(s), font, size);
         t.setPosition(x, y);
         t.setFillColor(c);
@@ -30,22 +34,22 @@ void hudView::draw(sf::RenderWindow& w, float panelX, int currentPlayer,
 
     sf::RectangleShape panel({kVirtualW - panelX, kVirtualH});
     panel.setPosition(panelX, 0.f);
-    panel.setFillColor(sf::Color(44, 38, 30));
+    panel.setFillColor(th.hudPanel);
     w.draw(panel);
 
     float x = panelX + 24.f;
     if (!headline.empty()) {
-        text(fonts_.title_bold, headline, x, 30.f, 26, sf::Color(255, 230, 150));
-        if (!subline.empty()) text(fonts_.title_bold, subline, x, 70.f, 24, sf::Color(252, 234, 174));
+        text(fonts_.title_bold, headline, x, 30.f, 26, th.accent);
+        if (!subline.empty()) text(fonts_.title_bold, subline, x, 70.f, 24, th.accent);
     }
     else if (gameOver) {
-        text(fonts_.title_bold, "Game Over", x, 30.f, 28, sf::Color(255, 200, 80));
+        text(fonts_.title_bold, "Game Over", x, 30.f, 28, th.accent);
     } else {
         sf::CircleShape s(18.f);
         s.setPosition(x, 30.f);
-        s.setFillColor(currentPlayer == 1 ? sf::Color(20, 20, 20) : sf::Color(245, 245, 245));
+        s.setFillColor(currentPlayer == 1 ? th.blackFill : th.whiteFill);
         s.setOutlineThickness(2.f);
-        s.setOutlineColor(sf::Color(215, 207, 191));
+        s.setOutlineColor(currentPlayer == 1 ? th.blackRim : th.whiteRim);
         w.draw(s);
         text(fonts_.title_bold, currentPlayer == 1 ? "Turn: Black" : "Turn: White", x + 50.f, 32.f, 26);
     }
@@ -54,13 +58,13 @@ void hudView::draw(sf::RenderWindow& w, float panelX, int currentPlayer,
     text(fonts_.body, "White stones: " + std::to_string(whiteStones), x, 160.f, 20);
 
     float y = 220.f;
-    for (auto& t : toasts_) { text(fonts_.body, t.text, x, y, 17, sf::Color(255, 230, 150)); y += 32.f; }
+    for (auto& t : toasts_) { text(fonts_.body, t.text, x, y, 17, muted); y += 32.f; }
 
-    text(fonts_.body, "Shortcuts: ", x, 575.f, 15, sf::Color(215, 207, 191));
-    text(fonts_.body, "P = Pass", x,600.f, 15, sf::Color(215, 207, 191));
-    text(fonts_.body, "LArrow = Undo",x,625.f, 15, sf::Color(215, 207, 191));
-    text(fonts_.body, "RArrow = Redo", x, 650.f, 15, sf::Color(215, 207, 191));
-    text(fonts_.body, "N = Reset board", x, 675.f, 15, sf::Color(215, 207, 191));
-    text(fonts_.body, "R = Resign", x,700.f, 15, sf::Color(215, 207, 191));
-    text(fonts_.body, "S = Save Game", x, 725.f, 15, sf::Color(215, 207, 191));
+    text(fonts_.body, "Shortcuts: ", x, 575.f, 15, th.textPrimary);
+    text(fonts_.body, "P = Pass", x,600.f, 15, th.textPrimary);
+    text(fonts_.body, "LArrow = Undo",x,625.f, 15, th.textPrimary);
+    text(fonts_.body, "RArrow = Redo", x, 650.f, 15, th.textPrimary);
+    text(fonts_.body, "N = Reset board", x, 675.f, 15, th.textPrimary);
+    text(fonts_.body, "R = Resign", x,700.f, 15, th.textPrimary);
+    text(fonts_.body, "S = Save Game", x, 725.f, 15, th.textPrimary);
 }

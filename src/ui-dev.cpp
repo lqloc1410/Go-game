@@ -12,11 +12,19 @@
 #include "ui/audio.hpp"
 #include "ui/menu.hpp"
 #include "ui/render.hpp"
+#include "ui/theme.hpp"
 
 static std::string marginText(double s) {
     std::ostringstream os;
     os << std::fixed << std::setprecision(1) << (s > 0 ? s : -s);
     return std::string(s > 0 ? "White" : "Black") + " leads by " + os.str();
+}
+static sf::Sprite coverSprite(const sf::Texture& tex, float W, float H) {
+    sf::Sprite s(tex);
+    float k = std::max(W / tex.getSize().x, H / tex.getSize().y);
+    s.setScale(k, k);
+    s.setPosition((W - tex.getSize().x * k) / 2.f, (H - tex.getSize().y * k) / 2.f);
+    return s;
 }
 static sf::ConvexShape roundedRect(sf::Vector2f size, float radius, int pts = 10) {
     sf::ConvexShape shape(4 * pts);
@@ -49,25 +57,6 @@ int main() {
     GameSession game(9);
     BoardView board(9, 800.f);
 
-    sf::Texture bg_image;
-    if (!bg_image.loadFromFile("assets/image/background.jpg")) std::cerr << "Could not load background image\n";
-    bg_image.setSmooth(true);
-    
-    sf::Sprite bg(bg_image);
-
-    const float w = 1150.f, h = 800.f;
-    float scale = std::max(w / bg_image.getSize().x, h / bg_image.getSize().y);
-    bg.setScale(scale, scale);
-    bg.setPosition((w - bg_image.getSize().x * scale) / 2.f, (h - bg_image.getSize().y * scale) / 2.f);
-
-    sf::Texture woodTex;
-    if (!woodTex.loadFromFile("assets/image/wooden.jpg")) std::cerr<<"Could not load board texture";
-    woodTex.setSmooth(true);
-
-    boardStyle style;
-    style.boardTex = &woodTex;
-    board.setStyle(style);
-
 
     Fonts fonts;
     if (!fonts.load()) return 1;
@@ -78,7 +67,7 @@ int main() {
 
     // AI-assisted: see AI43, AI44
 
-    enum class screen { Menu, Game, GameOver, Placeholder}; //Placeholder is temporary for Saved game and Settings
+    enum class screen { Menu, Game, GameOver, Settings, Placeholder}; //Placeholder is temporary for Saved game and Settings
     screen screen = screen::Menu;
     std::string placeholderTitle;
     bool gameStarted = false;
@@ -96,20 +85,40 @@ int main() {
     button goNewBtn ("New Game", {575.f, 440.f}, {300.f, 54.f}, fonts.body);
     button goViewBtn ("View board", {575.f, 510.f}, {300.f, 54.f}, fonts.body);
     button goMenuBtn ("Main menu", {575.f, 580.f}, {300.f, 54.f}, fonts.body);
+
+    themeManager& themes = themeManager::instance();
+    themes.loadChoice();
     
+    button themeBtn0("", {575.f, 330.f}, {420.f, 56.f}, fonts.body);
+    button themeBtn1("", {575.f, 400.f}, {420.f, 56.f}, fonts.body);
+    button themeBtn2("", {575.f, 470.f}, {420.f, 56.f}, fonts.body);
+    button settingsBackBtn("Back", {575.f, 580.f}, {240.f, 50.f}, fonts.body);
+    button* themeBtns[kThemeCount] = {&themeBtn0, &themeBtn1, &themeBtn2};
+
+    auto refreshThemeLabels = [&] {
+        for (int i = 0; i < kThemeCount; ++i) {
+            const theme& t = themes.get(static_cast<themeID>(i));
+            const bool on = (themes.currentId() == t.id);
+            themeBtns[i]->setLabel((on ? "> " : "") + t.displayName + (on ? " <" : ""));
+        }
+    };
+    refreshThemeLabels();
+
     sf::RectangleShape overlay({1150.f, 800.f});
     overlay.setFillColor(sf::Color(0, 0, 0, 170));
     
+    const theme& th = themeManager::instance().current();
+
     sf::ConvexShape box = roundedRect({520.f, 460.f}, 24.f);
     box.setPosition(575.f - 260.f, 400.f - 230.f); 
-    box.setFillColor(sf::Color(40, 32, 26, 245));
+    box.setFillColor(withAlpha(th.hudPanel, 245));
     box.setOutlineThickness(3.f);
-    box.setOutlineColor(sf::Color(200, 160, 90));
+    box.setOutlineColor(th.accent);
 
     sf::RectangleShape divider({440.f, 2.f});
     divider.setOrigin(220.f, 1.f);
     divider.setPosition(575.f, 395.f);
-    divider.setFillColor(sf::Color(200, 160, 90, 120));
+    divider.setFillColor(withAlpha(th.accent, 120));
     
     bool over = false;
     bool viewingFinalBoard = false;
@@ -127,6 +136,7 @@ int main() {
         gameStarted = true;
         screen = screen::Game;
         prevPhase = game.phase();
+        board.resetAnimation();
     };
 
     // Báo kết quả đúng một lần khi ván vừa kết thúc
@@ -162,6 +172,12 @@ int main() {
     sf::Clock clock;
     bool hasSaveFile = std::filesystem::exists("./data/save.sgf");
     
+    audio.load();
+    themes.onChange([&](const theme& t) { 
+        audio.applyTheme(t); 
+        themes.saveChoice(); 
+    });
+
     while (window.isOpen()) {
         sf::Event e;
         while (window.pollEvent(e)) {
@@ -199,7 +215,7 @@ int main() {
                         break;
                     case menuAction::Settings:
                         placeholderTitle = "Settings";
-                        screen = screen::Placeholder;
+                        screen = screen::Settings;
                         break;
                     case menuAction::None:
                         break;
@@ -234,6 +250,19 @@ int main() {
                     viewingFinalBoard = false;
                     screen = screen::Menu;
                 }
+                continue;
+            }
+
+            if (screen == screen::Settings) {
+                if (e.type == sf::Event::MouseButtonPressed && e.mouseButton.button == sf::Mouse::Left) {
+                    for (int i = 0; i < kThemeCount; ++i)
+                        if (themeBtns[i]->contains(mouse)) { 
+                            themes.set(static_cast<themeID>(i)); 
+                            refreshThemeLabels();
+                        }
+                    if (settingsBackBtn.contains(mouse)) screen = screen::Menu;
+                }
+                if (e.type == sf::Event::KeyPressed && e.key.code == sf::Keyboard::Escape) screen = screen::Menu;
                 continue;
             }
 
@@ -355,6 +384,11 @@ int main() {
             goViewBtn.setHover(goViewBtn.contains(mouseNow));
             goMenuBtn.setHover(goMenuBtn.contains(mouseNow));
         }
+        if (screen == screen::Settings) { 
+            for (auto* b : themeBtns) b->setHover(b->contains(mouseNow)); 
+            settingsBackBtn.setHover(settingsBackBtn.contains(mouseNow)); 
+        }
+
         bool marking = (ph == Phase::Marking);
         resumeBtn.setHover(marking && resumeBtn.contains(mouseNow));
         doneBtn.setHover(marking && doneBtn.contains(mouseNow));
@@ -367,12 +401,14 @@ int main() {
         }
 
         hud.update(clock.restart().asSeconds());
+        audio.update(clock.restart().asSeconds());
 
-        window.clear(sf::Color(40, 40, 40));
-        window.draw(bg);
+        const theme& th = themes.current();
+        window.clear(th.windowBg);
 
         if (screen != screen::Game) {
-            window.draw(dim);
+            if (const sf::Texture* tex = themes.menuBg()) window.draw(coverSprite(*tex, 1150.f, 800.f));
+            if (th.menuDimAlpha > 0) { dim.setFillColor(sf::Color(0, 0, 0, th.menuDimAlpha)); window.draw(dim); }
         }
 
         switch (screen) { // AI-assisted: see AI43, AI44
@@ -414,6 +450,12 @@ int main() {
                     resumeBtn.draw(window);
                     doneBtn.draw(window);
                 }
+                break;
+            }
+            case screen::Settings: {
+                textCentered(window, "Choose a theme", fonts.title_bold, 44, {575.f, 220.f}, th.textPrimary);
+                for (auto* b : themeBtns) b->draw(window);
+                settingsBackBtn.draw(window);
                 break;
             }
             case screen::GameOver: {

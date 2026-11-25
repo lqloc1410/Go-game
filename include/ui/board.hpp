@@ -2,19 +2,10 @@
 #include <SFML/Graphics.hpp>
 #include <functional>
 #include <optional>
+#include <vector>
+#include "ui/theme.hpp"
 
 struct GridPos { int x, y; };
-
-struct boardStyle {
-    sf::Color boardColor{222, 184, 125};
-    sf::Color lineColor{0, 0, 0};
-    sf::Color blackStone{20, 20, 20};
-    sf::Color whiteStone{245, 245, 245};
-    sf::Color markColor{220, 50, 50};
-    const sf::Texture* boardTex = nullptr;
-    const sf::Texture* blackTex = nullptr;
-    const sf::Texture* whiteTex = nullptr;
-};
 
 // AI-assisted: see AI29, AI33
 class BoardView {
@@ -27,10 +18,8 @@ public:
     // giao điểm (x,y) -> toạ độ pixel; và ngược lại
     sf::Vector2f gridToPixel(int x, int y) const;
     std::optional<GridPos> pixelToGrid(sf::Vector2f p) const;
-
-    void setStyle(const boardStyle& s) { style = s; staticDirty_ = true; }
-
     void setHover(std::optional<GridPos> p) { hover_ = p; }
+    void resetAnimation();
 
     // stoneAt(x,y) trả về: 0 = trống, 1 = đen, 2 = trắng
     // currentPlayer: 1 hoặc 2, dùng để vẽ quân mờ khi rê chuột
@@ -38,18 +27,31 @@ public:
               const std::function<int(int, int)>& stoneAt,
               int currentPlayer,
               std::optional<GridPos> lastMove = std::nullopt,
-              const std::function<bool(int, int)>& isDead = nullptr) const;
+              const std::function<bool(int, int)>& isDead = nullptr,
+              const std::function<int(int, int)>& territoryAt = nullptr) const;
 
 private:
     void recompute();
     void rebuildStatic() const;
+    void drawStone(sf::RenderTarget& t, sf::Vector2f p, int who, float alpha01, float scale = 1.f) const;
+
     mutable sf::RenderTexture staticTex_;
     mutable bool staticDirty_ = true;
     static constexpr unsigned kSuperSample = 2;
+    mutable unsigned themeVersion_ = 0;
+
     int n_;
     float size_;
     float cell_ = 0.f;
     sf::Vector2f origin_;
     std::optional<GridPos> hover_;
-    boardStyle style;
+
+    struct fading {
+        int x, y, who;
+        float age;
+    };
+    mutable std::vector<int> prev_;
+    mutable std::vector<fading> fading_;
+    mutable sf::Clock animClock_;
+    mutable bool animPrimed_ = false;
 };

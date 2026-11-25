@@ -1,4 +1,5 @@
 #include "ui/button.hpp"
+#include "ui/theme.hpp"
 
 // AI-assisted: see AI43, AI44
 
@@ -20,20 +21,21 @@ void button::setLabel(const std::string& s) {
 }
 
 void button::draw(sf::RenderWindow& w) {
+    const theme& th = themeManager::instance().current();
     if (!enabled) {
-        box.setFillColor(sf::Color(68, 58, 53,120));
-        box.setOutlineColor(sf::Color(41, 16, 3,120));
-        text.setFillColor(sf::Color(228, 221, 204));
-    }
+        box.setFillColor(mixColor(th.hudPanel, th.windowBg, 0.5f));
+        box.setOutlineColor(mixColor(th.hudPanel, th.textPrimary, 0.12f));
+        text.setFillColor(mixColor(th.hudPanel, th.textPrimary, 0.35f));
+    } 
     else if (hover) {
-        box.setFillColor(sf::Color(239, 201, 148));
-        box.setOutlineColor(sf::Color(82, 59, 46));
-        text.setFillColor(sf::Color(82, 59, 46));
-    }
+        box.setFillColor(mixColor(th.hudPanel, th.accent, 0.45f));
+        box.setOutlineColor(th.accent);
+        text.setFillColor(th.textPrimary);
+    } 
     else {
-        box.setFillColor(sf::Color(90, 61, 41, 200));
-        box.setOutlineColor(sf::Color(121, 84, 52));
-        text.setFillColor(sf::Color(241, 218, 191));
+        box.setFillColor(th.hudPanel);
+        box.setOutlineColor(mixColor(th.hudPanel, th.textPrimary, 0.35f));
+        text.setFillColor(th.textPrimary);
     }
     w.draw(box);
     w.draw(text);
