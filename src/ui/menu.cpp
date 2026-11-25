@@ -109,7 +109,7 @@ void menuView::initSettingsButtons() {
 }
 
 void menuView::refreshSettingsLabels() {
-    settingsBtns[0].setLabel(std::string("BGM: ") + (cfg.bgmOn ? "ON" : "OFF"));
+    settingsBtns[0].setLabel(std::string("Background Music: ") + (cfg.bgmOn ? "ON" : "OFF"));
     settingsBtns[1].setLabel(std::string("Sound Effects: ") + (cfg.sfxOn ? "ON" : "OFF"));
     settingsBtns[2].setLabel(std::string("Board Theme: ") + themeName(cfg.theme));
     settingsBtns[3].setLabel(std::string("Stone Style: ") + stoneName(cfg.stones));
@@ -270,7 +270,7 @@ void menuView::drawSettingsPopup(sf::RenderWindow& w) {
     w.draw(box);
 
     // 3. Popup title & buttons
-    textCentered(w, "SETTINGS", fonts.body_decor, 38, {575.f, 195.f}, sf::Color(55, 36, 20));
+    textCentered(w, "SETTINGS", fonts.title_bold, 38, {575.f, 195.f}, sf::Color(55, 36, 20));
 
     for (auto& b : settingsBtns) b.draw(w);
 }
