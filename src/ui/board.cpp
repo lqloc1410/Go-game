@@ -237,16 +237,21 @@ void BoardView::draw(sf::RenderWindow& w, const std::function<int(int, int)>& st
         drawStone(w, gridToPixel(f.x, f.y), f.who, k, 0.85f + 0.15f * k);
     }
 
-    // last move marker, in the theme's colour 
+    // last move marker 
     if (lastMove && stoneAt(lastMove->x, lastMove->y) != 0) {
-        const float mr = r * 0.42f;
-        sf::CircleShape ring(mr);
-        ring.setOrigin(mr, mr);
-        ring.setPosition(gridToPixel(lastMove->x, lastMove->y));
-        ring.setFillColor(sf::Color::Transparent);
-        ring.setOutlineThickness(std::max(2.f, cell_ * 0.05f));
-        ring.setOutlineColor(th.lastMove);
-        w.draw(ring);
+        int who = stoneAt(lastMove -> x, lastMove -> y);
+        if (who != 0) {
+            sf::Color ring = (who == 1) ? th.whiteFill : th.blackFill;
+            ring.a = 255;
+            float mr = r * 0.6f;
+            sf::CircleShape mark(mr);
+            mark.setOrigin(mr, mr);
+            mark.setPosition(gridToPixel(lastMove -> x, lastMove -> y));
+            mark.setFillColor(sf::Color::Transparent);
+            mark.setOutlineThickness(std::max(2.f, r * 0.10f));
+            mark.setOutlineColor(ring);
+            w.draw(mark);
+        }
     }
 
     // hover ghost: about 40% opacity 

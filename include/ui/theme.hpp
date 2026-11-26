@@ -29,7 +29,7 @@ struct theme {
     int boardTexAlpha;
     int menuDimAlpha;
 
-    std::string menuBg, boardTex, music; 
+    std::string menuBg, boardTex, bgm, sfxStone, sfxCapture, sfxError; 
 };
 
 sf::Color hexColor(unsigned rgb, unsigned alpha = 255);

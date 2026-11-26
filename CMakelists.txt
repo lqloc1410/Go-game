@@ -65,6 +65,7 @@ set (SOURCES
     src/Game.cpp
     src/GameParser.cpp
     src/AI.cpp
+    src/ui/theme.cpp
 )
 
 add_library(GoCore STATIC ${SOURCES})

@@ -11,6 +11,7 @@ class Audio {
         void update(float dt);
         void playStone();
         void playCapture();
+        void playUi();
         void playError();
         void setSfxVolume(float v);
         void setMusicOn(bool on);

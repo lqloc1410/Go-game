@@ -3,15 +3,16 @@
 #include <algorithm>
 #include <random>
 #include <ui/audio.hpp>
+#include <iostream>
 
 bool Audio::loadSfx(sf::SoundBuffer& buf, sf::Sound& snd, const std::string& path) {
-    if (!buf.loadFromFile(path)) { std::cerr << "Could not load sound: " << path << "\n"; return false; }
+    if (!buf.loadFromFile(path)) { std::cerr << "Could not load sound effect: " << path << "\n"; return false; }
     snd.setBuffer(buf);
     return true;
 }
 
 void Audio::startMusic(const std::string& path) {
-    if (!bgm.openFromFile(path)) { std::cerr << "Could not open music: " << path << "\n"; currentMusic.clear(); return; }
+    if (!bgm.openFromFile(path)) { std::cerr << "Could not open background music: " << path << "\n"; currentMusic.clear(); return; }
     bgm.setLoop(true);
     currentMusic = path;
     if (musicOn) bgm.play();
@@ -19,12 +20,19 @@ void Audio::startMusic(const std::string& path) {
 
 bool Audio::load() { applyTheme(themeManager::instance().current()); return sfxOn; }
 void Audio::applyTheme(const theme& t) {
+    stone.stop();
+    capture.stop();
+    error.stop();
+    sfxOn = loadSfx(stonebuf, stone,t.sfxStone);
+    sfxOn &= loadSfx(capturebuf, capture, t.sfxCapture);
+    sfxOn &= loadSfx(errorbuf, error, t.sfxError);
+    setSfxVolume(sfxVolume);
 
-    if (currentMusic.empty() && musicState == state::None) {            // first call: start right away
+    if (currentMusic.empty() && musicState == state::None) {
         bgm.setVolume(musicVolume);
-        startMusic(t.music);
-    } else if (t.music != currentMusic) {                         // later: fade out, swap, fade in
-        pendingMusic = t.music;
+        startMusic(t.bgm);
+    } else if (t.bgm != currentMusic) {
+        pendingMusic = t.bgm;
         musicState = state::Out;
         musicFade = 0.f;
     }
@@ -44,7 +52,12 @@ void Audio::update(float dt) {
     }
 }
 
-void Audio::playStone() { stone.play(); }
+void Audio::playStone() { 
+    stone.play(); 
+    std::cout << "playStone: samples=" << stonebuf.getSampleCount()
+          << " volume=" << stone.getVolume()
+          << " status=" << static_cast<int>(stone.getStatus()) << "\n";
+}
 void Audio::playCapture() { capture.play(); }
 void Audio::playError() { error.play(); }
 

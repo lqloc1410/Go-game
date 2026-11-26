@@ -57,7 +57,8 @@ themeManager::themeManager() {
     }
     for (theme& t : themes_) {                                   // asset paths follow one naming rule
         const std::string d = "assets/themes/" + t.name + "/";
-        t.menuBg = d + "bg.jpg";  t.boardTex = d + "board.jpg";  t.music = d + "bgm.ogg";
+        t.menuBg = d + "bg.jpg";  t.boardTex = d + "board.jpg";  t.bgm = d + "bgm.ogg";
+        t.sfxStone = d + "stone.wav"; t.sfxCapture = d + "capture.wav", t.sfxError = d + "error.wav";
     }
 }
 
