@@ -438,9 +438,9 @@ int main() {
                 break;
 
             case screen::Placeholder:
-                textCentered(window, placeholderTitle, fonts.title_bold, 48, {575.f, 250.f}, sf::Color(44, 38, 30));
-                textCentered(window, "Coming soon", fonts.body, 26, {575.f, 340.f}, sf::Color(90, 61, 41));
-                textCentered(window, "(Press Esc to go back)", fonts.body, 26, {575.f, 380.f}, sf::Color(121, 84, 52));
+                textCentered(window, placeholderTitle, fonts.title_bold, 48, {575.f, 250.f}, th.accent);
+                textCentered(window, "Coming soon", fonts.body, 26, {575.f, 340.f}, th.textPrimary);
+                textCentered(window, "(Press Esc to go back)", fonts.body, 26, {575.f, 380.f}, th.textPrimary);
                 break;
 
             case screen::Game: {

@@ -47,7 +47,7 @@ themeManager::themeManager() {
         t.id = themeID::dark;  t.name = "dark";  t.displayName = "Dark Mode";
         t.windowBg = hexColor(0x121215);  t.hudPanel = hexColor(0x1E1E24);  t.boardTint = hexColor(0x24242B);
         t.grid = hexColor(0x001d2e);  t.textPrimary = hexColor(0xF4F4F6);
-        t.accent = hexColor(0x015382);  t.lastMove = hexColor(0x38BDF8);
+        t.accent = hexColor(0x1f6eb8);  t.lastMove = hexColor(0x38BDF8);
         t.blackFill = hexColor(0x0A0A0C);  t.blackShade = hexColor(0x000000);              // black with a visible rim
         t.blackHighlight = hexColor(0xFFFFFF, 30);  t.blackRim = hexColor(0x5A5A68);
         t.whiteFill = hexColor(0xE4E4E7);  t.whiteShade = hexColor(0xB4B4BC);              // soft off-white
