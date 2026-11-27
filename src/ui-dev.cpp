@@ -1,9 +1,12 @@
 #include <SFML/Graphics.hpp> // AI-assisted: see AI30
+#include <SFML/Window/ContextSettings.hpp>
 #include <iomanip>
 #include <sstream>
 #include <thread>
 #include <algorithm> // AI-assisted: seeAI79
 #include <cmath>
+#include <chrono>
+#include <future>
 #include "mode/gameSession.hpp"
 #include "ui/board.hpp"
 #include "ui/hudView.hpp"
@@ -47,10 +50,11 @@ static std::string pointsText(double s) {
     return os.str();
 }
 int main() {
-
-    sf::RenderWindow window(sf::VideoMode(1150, 800), "Go UI - dev");
+    sf::ContextSettings settings;
+    settings.antialiasingLevel = 8; // 4 or 8 (driver clamps to max supported)
+    sf::RenderWindow window(sf::VideoMode(1150, 800), "Go UI - dev", sf::Style::Default, settings);
     window.setFramerateLimit(60);
-
+    //window.setVerticalSyncEnabled(true);
     window.setView(makeLetterboxView(window.getSize())); // AI-assisted: see AI36
 
 
@@ -108,13 +112,67 @@ int main() {
     
     bool over = false;
     bool viewingFinalBoard = false;
+    bool isAI = false;
+    std::future<int16_t> aiFuture;
+    bool aiThinking = false;
+    int aiPlayer = 2; // 1 = Black, 2 = White
+
+    auto waitForAI = [&]{
+        if (aiThinking && aiFuture.valid()) { aiFuture.wait(); aiThinking = false; }
+    };
+
+    auto isAITurn = [&]{
+        return isAI && game.phase() == Phase::Playing && game.currentPlayer() == aiPlayer;
+    };
 
     auto isDead = [&](int x, int y) {
         return game.isDeadStone(x, y);
     };
 
+    auto toAIDiff = [](difficulty d) {
+        switch (d) {
+            case difficulty::Easy:   return AIDifficulty::Easy;
+            case difficulty::Medium: return AIDifficulty::Medium;
+            case difficulty::Hard:   return AIDifficulty::Hard;
+        }
+        return AIDifficulty::Easy;
+    };
+
+    auto syncAIFromGame = [&] {
+        isAI = game.isAI();
+        aiPlayer = (game.aiColor() == Color::Black) ? 1 : 2;
+    };
+
+    auto performUndo = [&] {
+        if (!game.undo()) {
+            hud.push("Nothing to undo!");
+            return;
+        }
+        if (isAI && isAITurn()) {
+            // Undo the preceding human move too so Undo doesn't immediately re-trigger AI.
+            // If only the AI's opening move existed, restore it rather than forcing a re-search.
+            if (!game.undo()) {
+                game.redo();
+                hud.push("Nothing to undo!");
+            }
+        }
+    };
+
+    auto performRedo = [&] {
+        if (!game.redo()) {
+            hud.push("Nothing to redo!");
+            return;
+        }
+        if (isAI && isAITurn()) {
+            game.redo();
+        }
+    };
+
     auto startNewGame = [&] {
+        waitForAI();
         game.newGame(cfg.boardSize, cfg.komi, cfg.handicap); //mchau nho implement handicaps nhe :3
+        game.setAIConfig(cfg.mode == gameMode::PvAI, toAIDiff(cfg.difficulty), Color::White);
+        syncAIFromGame();
         board.setBoardSize(cfg.boardSize);
         board.setHover(std::nullopt);
         viewingFinalBoard = false;
@@ -157,6 +215,20 @@ int main() {
 
     sf::Clock clock;
     bool hasSaveFile = std::filesystem::exists("./data/save.sgf");
+
+    auto makeHudStates = [&] {
+        const bool playing = (game.phase() == Phase::Playing);
+        return hudButtonStates{
+            playing && !aiThinking && !isAITurn(),      // canPass
+            playing && !aiThinking,                     // canResign
+            playing && !aiThinking,                     // canUndo
+            playing && !aiThinking,                     // canRedo
+            gameStarted && !aiThinking,                 // canSave
+            hasSaveFile && !aiThinking,                 // canLoad
+            gameStarted && !aiThinking,                 // canReset
+            true                                        // canMenu
+        };
+    };
     
     audio.load();
     themes.onChange([&](const theme& t) { 
@@ -182,7 +254,10 @@ int main() {
                 window.setView(makeLetterboxView({e.size.width, e.size.height}));
             }
 
-            if (e.type == sf::Event::Closed) window.close();
+            if (e.type == sf::Event::Closed) {
+                waitForAI();
+                window.close();
+            }
 
             sf::Vector2f mouse = window.mapPixelToCoords(sf::Mouse::getPosition(window));
 
@@ -197,14 +272,19 @@ int main() {
                     case menuAction::resume:
                         if (gameStarted){
                             screen = screen::Game;
-                        }else if (game.load()) {
-                            screen = screen::Game;
-                            board.setBoardSize(game.size());
-                            gameStarted = true;
-                            over = game.isGameOver();
-                            board.setHover(std::nullopt);
+                        }else {
+                            waitForAI();
+                            if (game.load()) {
+                                screen = screen::Game;
+                                board.setBoardSize(game.size());
+                                gameStarted = true;
+                                over = game.isGameOver();
+                                prevPhase = game.phase();
+                                board.setHover(std::nullopt);
+                                syncAIFromGame();
+                            }
+                            else screen = screen::Menu;
                         }
-                        else screen = screen::Menu;
                         break;
                     case menuAction::openSaved: 
                         placeholderTitle = "Saved game";
@@ -226,7 +306,7 @@ int main() {
             }
 
             if (e.type == sf::Event::MouseMoved)
-                board.setHover(game.phase() == Phase::Playing ? board.pixelToGrid(mouse) : std::nullopt);
+                board.setHover((game.phase() == Phase::Playing && !aiThinking && !isAITurn()) ? board.pixelToGrid(mouse) : std::nullopt);
 
             if (screen == screen::GameOver) {
                 if (e.type == sf::Event::MouseButtonPressed && e.mouseButton.button == sf::Mouse::Left) {
@@ -252,10 +332,6 @@ int main() {
 
 
             if (e.type == sf::Event::MouseButtonPressed && e.mouseButton.button == sf::Mouse::Left) {
-                bool canUndo = (game.phase() == Phase::Playing);
-                bool canRedo = (game.phase() == Phase::Playing);
-                bool canReset = gameStarted;
-
                 bool clickedBoardOrMarking = false;
                 switch (game.phase()) {
                     case Phase::Marking:
@@ -274,6 +350,7 @@ int main() {
                         }
                         break;
                     case Phase::Playing:
+                        if (aiThinking || isAITurn()) break;
                         if (auto p = board.pixelToGrid(mouse)) {
                             clickedBoardOrMarking = true;
                             MoveInfo m = game.play(p->x, p->y);
@@ -317,13 +394,22 @@ int main() {
                             break;
                 }
                 if (!clickedBoardOrMarking) {
-                    hudAction act = hud.handleClick(mouse, 800.f, canUndo, canRedo, canReset);
+                    hudAction act = hud.handleClick(mouse, 800.f, makeHudStates());
                     switch (act) {
+                        case hudAction::Pass:
+                            if (game.phase() == Phase::Playing) {
+                                int who = game.currentPlayer();
+                                if (game.pass()) hud.push(who == 1 ? "Black passed." : "White passed.");
+                            }
+                            break;
+                        case hudAction::Resign:
+                            if (!game.resign()) hud.push("The game is already over!");
+                            break;
                         case hudAction::Undo:
-                            if (!game.undo()) hud.push("Nothing to undo!");
+                            if (game.phase() == Phase::Playing && !aiThinking) performUndo();
                             break;
                         case hudAction::Redo:
-                            if (!game.redo()) hud.push("Nothing to redo!");
+                            if (game.phase() == Phase::Playing && !aiThinking) performRedo();
                             break;
                         case hudAction::Save:
                             if (game.save()) {
@@ -334,12 +420,39 @@ int main() {
                                 hud.push("Save failed! Try again.");
                             }
                             break;
+                        case hudAction::Load:
+                            // mchau pls add this when you have time    
+
+                            hud.push("Load not implemented yet.");
+                            /*if (game.load()) {
+                                board.setBoardSize(game.size());
+                                board.setHover(std::nullopt);
+                                board.resetAnimation();
+                                viewingFinalBoard = false;
+                                over = game.isGameOver();
+                                prevPhase = game.phase();
+                                gameStarted = true;
+                                syncAIFromGame();
+                                hud.push("Game loaded!");
+                            }
+                            else {
+                                hud.push("Load failed! No valid save found.");
+                            }*/
+                            break;
                         case hudAction::Reset:
+                            waitForAI();
                             game.newGame();
                             viewingFinalBoard = false;
                             over = false;
                             prevPhase = game.phase();
                             hud.push("Board reset!");
+                            break;
+                        case hudAction::Menu:
+                            waitForAI();
+                            screen = screen::Menu;
+                            if (!game.isGameOver() && game.save()) {
+                                hasSaveFile = true;
+                            }
                             break;
                         case hudAction::None:
                             break;
@@ -349,38 +462,45 @@ int main() {
             if (e.type == sf::Event::KeyPressed) {
                 switch (e.key.code) {
                     case sf::Keyboard::Escape: 
-                    screen = screen::Menu; 
-                    if (!game.isGameOver()) {
-                        game.save(); 
-                        hasSaveFile = true;
-                    }
-                    break;
+                        waitForAI();
+                        screen = screen::Menu; 
+                        if (!game.isGameOver()) {
+                            game.save(); 
+                            hasSaveFile = true;
+                        }
+                        break;
                     case sf::Keyboard::P: {
-                        if (game.phase() == Phase::Playing) {
+                        if (game.phase() == Phase::Playing && !aiThinking && !isAITurn()) {
                             int who = game.currentPlayer();
                             if (game.pass()) hud.push(who == 1 ? "Black passed." : "White passed.");
                         }
                         break;
                     }
                     case sf::Keyboard::Left: 
-                        if (game.phase() == Phase::Playing) {
-                            if (!game.undo()) hud.push("Nothing to undo!");
+                        if (game.phase() == Phase::Playing && !aiThinking) {
+                            performUndo();
                         }
                         break;
                     case sf::Keyboard::Right: 
-                        if (game.phase() == Phase::Playing) {
-                            if (!game.redo()) hud.push("Nothing to redo!"); 
+                        if (game.phase() == Phase::Playing && !aiThinking) {
+                            performRedo();
                         }
                         break;
                     case sf::Keyboard::N: 
+                        if (aiThinking) break;
+                        waitForAI();
                         game.newGame(); 
                         viewingFinalBoard = false;
                         over = false;
                         prevPhase = game.phase();
                         hud.push("Board reset!"); 
                         break;
-                    case sf::Keyboard::R: if (!game.resign()) hud.push("The game is already over!"); break;
+                    case sf::Keyboard::R: 
+                        if (aiThinking) break;
+                        if (!game.resign()) hud.push("The game is already over!"); 
+                        break;
                     case sf::Keyboard::S: 
+                        if (aiThinking) break;
                         if (game.save()) {
                             hud.push("Game saved!"); 
                             hasSaveFile = true;
@@ -392,6 +512,33 @@ int main() {
             }
         }
         sf::Vector2f mouseNow = window.mapPixelToCoords(sf::Mouse::getPosition(window));
+
+        if (screen == screen::Game && isAITurn() && !aiThinking) {
+            board.setHover(std::nullopt);
+            AISearchInput input = game.captureAIInput();
+            aiThinking = true;
+            aiFuture = std::async(std::launch::async, [&game, input]() {
+                return game.computeAIMove(input.board, input.color, input.lastMoveType);
+            });
+        }
+        if (aiThinking && aiFuture.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) {
+            int16_t moveId = aiFuture.get();
+            aiThinking = false;
+            if (screen == screen::Game && isAITurn()) {
+                MoveInfo m = game.applyAIMove(moveId);
+                if (m.result == MoveStatus::Success) {
+                    if (m.is_pass) {
+                        hud.push("AI passed.");
+                    } else if (m.captured > 0) {
+                        hud.push("Captured " + std::to_string(m.captured) + " stones!");
+                        audio.playCapture();
+                    } else {
+                        audio.playStone();
+                    }
+                }
+            }
+        }
+
         game.syncPhase();
         Phase ph = game.phase();
         if (ph != prevPhase) {
@@ -412,7 +559,7 @@ int main() {
         bool marking = (ph == Phase::Marking);
         resumeBtn.setHover(marking && resumeBtn.contains(mouseNow));
         doneBtn.setHover(marking && doneBtn.contains(mouseNow));
-        hud.updateButtons(mouseNow, 800.f, ph == Phase::Playing, ph == Phase::Playing, gameStarted);
+        hud.updateButtons(mouseNow, 800.f, makeHudStates());
         
         bool canResume = (gameStarted && game.phase() != Phase::Finished || hasSaveFile);
         menu.update(mouseNow, canResume);

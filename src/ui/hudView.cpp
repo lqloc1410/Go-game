@@ -6,24 +6,49 @@ static sf::String u8(const std::string& s) {
     return sf::String::fromUtf8(s.begin(), s.end());
 }
 
+namespace {
+    struct ButtonSpec {
+        hudAction action;
+        const char* label;
+    };
+
+    constexpr std::array<ButtonSpec, hudView::kButtonCount> kButtonSpecs = {{
+        { hudAction::Pass,   "Pass (P)"   },
+        { hudAction::Resign, "Resign (R)" },
+        { hudAction::Undo,   "Undo (LArr)"   },
+        { hudAction::Redo,   "Redo (RArr)"   },
+        { hudAction::Save,   "Save (S)"   },
+        { hudAction::Load,   "Load (L)"   },
+        { hudAction::Reset,  "Reset (N)"  },
+        { hudAction::Menu,   "Menu (Esc)"   },
+    }};
+}
+
 hudView::hudView(const Fonts& fonts) : fonts_(fonts), btns_ {
-    button("Undo",  {0.f, 0.f}, {66.f, 36.f}, fonts.body),
-    button("Redo",  {0.f, 0.f}, {66.f, 36.f}, fonts.body),
-    button("Save",  {0.f, 0.f}, {66.f, 36.f}, fonts.body),
-    button("Reset", {0.f, 0.f}, {66.f, 36.f}, fonts.body)
+    button(kButtonSpecs[0].label, {0.f, 0.f}, {144.f, 38.f}, fonts.body),
+    button(kButtonSpecs[1].label, {0.f, 0.f}, {144.f, 38.f}, fonts.body),
+    button(kButtonSpecs[2].label, {0.f, 0.f}, {144.f, 38.f}, fonts.body),
+    button(kButtonSpecs[3].label, {0.f, 0.f}, {144.f, 38.f}, fonts.body),
+    button(kButtonSpecs[4].label, {0.f, 0.f}, {144.f, 38.f}, fonts.body),
+    button(kButtonSpecs[5].label, {0.f, 0.f}, {144.f, 38.f}, fonts.body),
+    button(kButtonSpecs[6].label, {0.f, 0.f}, {144.f, 38.f}, fonts.body),
+    button(kButtonSpecs[7].label, {0.f, 0.f}, {144.f, 38.f}, fonts.body)
     } {}
 
 void hudView::ensureButtons(float panelX) {
     if (builtPanelX == panelX) return;
     builtPanelX = panelX;
 
-    float colX = panelX + 250.f;
-    sf::Vector2f sz{150.f, 36.f};
+    const float colX[2] = { panelX + 96.f, panelX + 254.f };
+    const float startY = 570.f;
+    const float rowStep = 50.f;
+    const sf::Vector2f sz{144.f, 38.f};
 
-    btns_[0] = button("Undo", {colX,  600.f}, sz, fonts_.body);
-    btns_[1] = button("Redo", {colX, 650.f}, sz, fonts_.body);
-    btns_[2] = button("Save", {colX,  700.f}, sz, fonts_.body);
-    btns_[3] = button("Reset", {colX, 750.f}, sz, fonts_.body);
+    for (std::size_t i = 0; i < kButtonCount; ++i) {
+        const std::size_t col = i % 2;
+        const std::size_t row = i / 2;
+        btns_[i] = button(kButtonSpecs[i].label, {colX[col], startY + row * rowStep}, sz, fonts_.body);
+    }
 }
 
 void hudView::push(const std::string& t, float sec) {
@@ -38,20 +63,29 @@ void hudView::update(float dt) {
     while (!toasts_.empty() && toasts_.front().left <= 0.f) toasts_.pop_front();
 }
 
-void hudView::updateButtons(sf::Vector2f mouse, float panelX, bool canUndo, bool canRedo, bool canReset) {
+void hudView::updateButtons(sf::Vector2f mouse, float panelX, const hudButtonStates& states) {
     ensureButtons(panelX);
-    bool states[4] = { canUndo, canRedo, canReset, canReset };
-    for (int i = 0; i < 4; i++) {
-        btns_[i].setEnabled(states[i]);
+    const bool enabled[kButtonCount] = {
+        states.canPass,
+        states.canResign,
+        states.canUndo,
+        states.canRedo,
+        states.canSave,
+        states.canLoad,
+        states.canReset,
+        states.canMenu
+    };
+    for (std::size_t i = 0; i < kButtonCount; ++i) {
+        btns_[i].setEnabled(enabled[i]);
         btns_[i].setHover(btns_[i].contains(mouse));
     }
 }
-hudAction hudView::handleClick(sf::Vector2f mouse, float panelX, bool canUndo, bool canRedo, bool canReset) {
-    updateButtons(mouse, panelX, canUndo, canRedo, canReset);
-    if (btns_[0].contains(mouse)) return hudAction::Undo;
-    if (btns_[1].contains(mouse)) return hudAction::Redo;
-    if (btns_[2].contains(mouse)) return hudAction::Save;
-    if (btns_[3].contains(mouse)) return hudAction::Reset;
+
+hudAction hudView::handleClick(sf::Vector2f mouse, float panelX, const hudButtonStates& states) {
+    updateButtons(mouse, panelX, states);
+    for (std::size_t i = 0; i < kButtonCount; ++i) {
+        if (btns_[i].contains(mouse)) return kButtonSpecs[i].action;
+    }
     return hudAction::None;
 }
 
@@ -99,14 +133,6 @@ void hudView::draw(sf::RenderWindow& w, float panelX, int currentPlayer,
 
     float y = 220.f;
     for (auto& t : toasts_) { text(fonts_.body, t.text, x, y, 17, muted); y += 32.f; }
-
-    text(fonts_.body, "Shortcuts: ", x, 575.f, 15, th.textPrimary);
-    text(fonts_.body, "P = Pass", x,600.f, 15, th.textPrimary);
-    text(fonts_.body, "LArrow = Undo",x,625.f, 15, th.textPrimary);
-    text(fonts_.body, "RArrow = Redo", x, 650.f, 15, th.textPrimary);
-    text(fonts_.body, "N = Reset board", x, 675.f, 15, th.textPrimary);
-    text(fonts_.body, "R = Resign", x,700.f, 15, th.textPrimary);
-    text(fonts_.body, "S = Save Game", x, 725.f, 15, th.textPrimary);
 
     for (auto& b : btns_) b.draw(w);
 }

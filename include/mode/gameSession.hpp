@@ -18,6 +18,11 @@ struct MoveInfo {
     bool is_pass{false};
 };
 
+struct AISearchInput {
+    Board board; // Board is already a copyable value type (used in Game.cpp / AI.cpp)
+    Color color;
+    MoveType lastMoveType;
+};
 
 class GameSession {
 public:
@@ -31,6 +36,9 @@ public:
     MoveInfo playAIMove();
     void setAIDifficulty(AIDifficulty diff) { ai_.set_difficulty(diff); }
     AIDifficulty aiDifficulty() const { return ai_.get_difficulty(); }
+    void setAIConfig(bool isAI, AIDifficulty diff = AIDifficulty::Hard, Color aiColor = Color::White);
+    bool isAI() const { return game_.get_is_ai(); }
+    Color aiColor() const { return game_.get_ai_color(); }
 
 
     bool pass();
@@ -45,6 +53,7 @@ public:
     bool isGameOver() const    { return game_.is_game_over() != EndgameStatus::NotOver; }
     int  blackStones() const   { return game_.get_black_cnt(); }
     int  whiteStones() const   { return game_.get_white_cnt(); }
+    int get_move_cnt() const {return game_.get_history().get_history().size();}
     double score() const { return game_.calculate_score(); } // > 0: Trắng hơn, < 0: Đen hơn
     bool toggleDeadGroup(int x, int y) { return game_.toggle_dead_group(y, x); }
     bool isDeadStone(int x, int y) const { return game_.is_dead_stone(y, x); }
@@ -90,6 +99,10 @@ public:
         if (!isGameOver()) scoreConfirmed_ = false;
     }
     std::optional<Color> resignedPlayer() const {return game_.get_resigned_player();}
+
+    AISearchInput captureAIInput() const;
+    int16_t computeAIMove(const Board& boardCopy, Color aiColor, MoveType lastType);
+    MoveInfo applyAIMove(int16_t move_id);
 private:
     MoveType lastMoveType() const;
     bool finishLoad(bool status);
@@ -101,4 +114,6 @@ private:
     AIEngine ai_;
 
     bool scoreConfirmed_ = false;
+
+    
 };

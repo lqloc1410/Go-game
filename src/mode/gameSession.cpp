@@ -2,12 +2,42 @@
 
 // AI-assisted: see AI34
 
+namespace {
+    Difficulty toParserDifficulty(AIDifficulty d) {
+        switch (d) {
+            case AIDifficulty::Easy:   return Difficulty::Easy;
+            case AIDifficulty::Medium: return Difficulty::Medium;
+            case AIDifficulty::Hard:   return Difficulty::Hard;
+        }
+        return Difficulty::Hard;
+    }
+
+    AIDifficulty toAIDifficulty(Difficulty d) {
+        switch (d) {
+            case Difficulty::Easy:   return AIDifficulty::Easy;
+            case Difficulty::Medium: return AIDifficulty::Medium;
+            case Difficulty::Hard:   return AIDifficulty::Hard;
+        }
+        return AIDifficulty::Hard;
+    }
+}
+
 void GameSession::newGame(int boardSize, float komi, int handicap_cnt) {
+    const bool wasAI = game_.get_is_ai();
+    const Color prevAIColor = game_.get_ai_color();
+    const AIDifficulty prevDiff = ai_.get_difficulty();
+
     game_ = Game(boardSize, komi, handicap_cnt);
     size_ = game_.get_size();
     handicap = game_.get_history().get_handicap_cnt();
     komi_ = static_cast<float>(game_.get_komi());
+    game_.set_ai_config(wasAI, toParserDifficulty(prevDiff), prevAIColor);
     ai_.reset();
+}
+
+void GameSession::setAIConfig(bool isAI, AIDifficulty diff, Color aiColor) {
+    game_.set_ai_config(isAI, toParserDifficulty(diff), aiColor);
+    ai_.set_difficulty(diff);
 }
 
 MoveType GameSession::lastMoveType() const {
@@ -34,11 +64,18 @@ MoveInfo GameSession::play(int x, int y) {
     return {stat, before - oppCount(), x, y, false};
 }
 
-MoveInfo GameSession::playAIMove() {
+AISearchInput GameSession::captureAIInput() const {
+    return { game_.get_board(), game_.get_turn(), lastMoveType() };
+}
+
+int16_t GameSession::computeAIMove(const Board& boardCopy, Color aiColor, MoveType lastType) {
+    return ai_.choose_move(boardCopy, aiColor, lastType);
+}
+
+MoveInfo GameSession::applyAIMove(int16_t move_id) {
     if (game_.is_game_over() != EndgameStatus::NotOver) return {MoveStatus::GameEnded};
 
     Color me = game_.get_turn();
-    int16_t move_id = ai_.choose_move(game_.get_board(), me, lastMoveType());
     if (move_id == -1) {
         if (!game_.pass()) return {MoveStatus::GameEnded};
         ai_.sync_move(game_.get_board(), -1, MoveType::Pass, me);
@@ -56,6 +93,12 @@ MoveInfo GameSession::playAIMove() {
     ai_.sync_move(game_.get_board(), move_id, MoveType::Place, me);
     Point p = toPoint(move_id, size_);
     return {stat, before - oppCount(), p.c, p.r, false};
+}
+
+MoveInfo GameSession::playAIMove() {
+    if (game_.is_game_over() != EndgameStatus::NotOver) return {MoveStatus::GameEnded};
+    AISearchInput in = captureAIInput();
+    return applyAIMove(computeAIMove(in.board, in.color, in.lastMoveType));
 }
 
 bool GameSession::pass() {
@@ -88,6 +131,7 @@ bool GameSession::finishLoad(bool status) {
     size_ = game_.get_size();
     komi_ = static_cast<float>(game_.get_komi());
     handicap = game_.get_history().get_handicap_cnt();
+    ai_.set_difficulty(toAIDifficulty(game_.get_ai_difficulty()));
     ai_.reset();
     return true;
 }
