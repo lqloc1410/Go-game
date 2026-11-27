@@ -4,7 +4,7 @@
 #include <cstdint>
 
 namespace {
-constexpr float kFadeSeconds = 0.30f;
+constexpr float kFadeSeconds = 0.15f;
 
 std::vector<GridPos> starPoints(int n) {
     if (n == 19) { std::vector<GridPos> v; for (int a : {3, 9, 15}) for (int b : {3, 9, 15}) v.push_back({a, b}); return v; }

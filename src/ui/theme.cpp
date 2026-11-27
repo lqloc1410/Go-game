@@ -93,7 +93,12 @@ void themeManager::set(themeID id) {
 }
 
 void themeManager::loadChoice(const std::string& path) {
-    std::ifstream in(path);
+    std::filesystem::path p = path.empty() ? defaultThemeConfigPath() : std::filesystem::path(path);
+    std::ifstream in(p);
+    if (!in) {
+        saveChoice(p.string()); // creates data/ and writes default theme (zen / zen)
+        return;
+    }
     std::string boardName, stoneName;
     if (!(in >> boardName)) return;
     if (!(in >> stoneName)) stoneName = boardName;
@@ -111,7 +116,14 @@ void themeManager::loadChoice(const std::string& path) {
     id = id_;
     if (find(stoneName, id)) stoneId_ = id;
 }
+
 void themeManager::saveChoice(const std::string& path) const {
-    std::ofstream out(path);
+    std::filesystem::path p = path.empty() ? defaultThemeConfigPath() : std::filesystem::path(path);
+    std::error_code ec;
+    if (p.has_parent_path()) {
+        std::filesystem::create_directories(p.parent_path(), ec);
+    }
+    std::ofstream out(p);
+    if (!out) return;
     out << current().name << "\n" << stones().name << "\n";
 }
