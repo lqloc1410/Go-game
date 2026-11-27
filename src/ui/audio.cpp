@@ -54,9 +54,9 @@ void Audio::update(float dt) {
 
 void Audio::playStone() { 
     stone.play(); 
-    std::cout << "playStone: samples=" << stonebuf.getSampleCount()
+    /* std::cout << "playStone: samples=" << stonebuf.getSampleCount()
           << " volume=" << stone.getVolume()
-          << " status=" << static_cast<int>(stone.getStatus()) << "\n";
+          << " status=" << static_cast<int>(stone.getStatus()) << "\n"; */
 }
 void Audio::playCapture() { capture.play(); }
 void Audio::playError() { error.play(); }
