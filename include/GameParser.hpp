@@ -16,16 +16,20 @@
 #include <fstream>
 #include <sstream>
 #include <string>
+#include <cctype>
 #include "GameLogic.hpp"
 
 enum class ResultType {Score, Resignation, Timeout, Disqualification, Void, Unknown, Draw};
 enum class Ruleset{Chinese, Japanese, AGA, Other};
+enum class Difficulty {Easy, Medium, Hard};
 
 std::string strip(const std::string& str);
 
 Ruleset string_to_ruleset(std::string s);
 
 std::string ruleset_to_string(Ruleset ruleset);
+
+std::string difficulty_to_string(Difficulty diff);
 
 struct GameResult{
     ResultType reason = ResultType::Unknown;
@@ -95,6 +99,10 @@ private:
     int GameMode = 1; // GM[1] for Go
     Ruleset ruleset = Ruleset::Chinese; // Currently only officially supports Chinese rules
 
+    bool isAI = false;
+
+    Difficulty difficulty = Difficulty::Hard;
+    Color AIColor = Color::White;
 
     int BoardSize = 19;
 
@@ -152,6 +160,16 @@ public:
     size_t get_move_count() const { return moves_list.size(); }
     bool has_moves() const { return !moves_list.empty(); }
     
+    bool get_is_ai() const { return isAI; }
+    Difficulty get_difficulty() const { return difficulty; }
+    std::string get_difficulty_str() const { return difficulty_to_string(difficulty); }
+    Color get_ai_color() const { return AIColor; }
+    void set_ai_config(bool ai, Difficulty diff = Difficulty::Hard, Color color = Color::White) {
+        isAI = ai;
+        difficulty = diff;
+        AIColor = color;
+    }
+
     // AI-generated
     friend std::ostream& operator<<(std::ostream& os, const GameLog &log);
 };

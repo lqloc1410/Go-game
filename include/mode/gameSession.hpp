@@ -5,7 +5,6 @@
 #include "GameParser.hpp"
 #include "AI.hpp"
 #include <optional>
-#include <utility>
 
 //enum class MoveResult { Ok, Occupied, Invalid, GameOver, OutOfBoard };
 
@@ -32,6 +31,7 @@ public:
     MoveInfo playAIMove();
     void setAIDifficulty(AIDifficulty diff) { ai_.set_difficulty(diff); }
     AIDifficulty aiDifficulty() const { return ai_.get_difficulty(); }
+
 
     bool pass();
     bool undo();
