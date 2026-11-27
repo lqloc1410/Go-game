@@ -65,7 +65,7 @@ void hudView::draw(sf::RenderWindow& w, float panelX, int currentPlayer,
     const sf::Color muted  = mixColor(th.hudPanel, th.textPrimary, 0.55f);
     
     auto text = [&](const sf::Font& font, const std::string& s, float x, float y,
-    unsigned size, sf::Color c = sf::Color::White) {
+    unsigned size, sf::Color c) {
         sf::Text t(u8(s), font, size);
         t.setPosition(x, y);
         t.setFillColor(c);
@@ -91,11 +91,11 @@ void hudView::draw(sf::RenderWindow& w, float panelX, int currentPlayer,
         s.setOutlineThickness(2.f);
         s.setOutlineColor(currentPlayer == 1 ? th.blackRim : th.whiteRim);
         w.draw(s);
-        text(fonts_.title_bold, currentPlayer == 1 ? "Turn: Black" : "Turn: White", x + 50.f, 32.f, 26);
+        text(fonts_.title_bold, currentPlayer == 1 ? "Turn: Black" : "Turn: White", x + 50.f, 32.f, 26, th.accent);
     }
 
-    text(fonts_.body, "Black stones: "   + std::to_string(blackStones), x, 130.f, 20);
-    text(fonts_.body, "White stones: " + std::to_string(whiteStones), x, 160.f, 20);
+    text(fonts_.body, "Black stones: "   + std::to_string(blackStones), x, 130.f, 20, th.textPrimary);
+    text(fonts_.body, "White stones: " + std::to_string(whiteStones), x, 160.f, 20, th.textPrimary);
 
     float y = 220.f;
     for (auto& t : toasts_) { text(fonts_.body, t.text, x, y, 17, muted); y += 32.f; }

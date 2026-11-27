@@ -34,7 +34,7 @@ themeManager::themeManager() {
         t.id = themeID::sumie;  t.name = "sumie";  t.displayName = "Sumi-e Ink Wash";
         t.windowBg = hexColor(0xEAE3D2);  t.hudPanel = hexColor(0xDFD6C1);  t.boardTint = hexColor(0xF4EFE6);
         t.grid = hexColor(0x2B2B2B);  t.textPrimary = hexColor(0x1C1C1C);
-        t.accent = hexColor(0xA63429);  t.lastMove = hexColor(0xB8292F);
+        t.accent = hexColor(0x630000);  t.lastMove = hexColor(0xB8292F);
         t.blackFill = hexColor(0x151515);  t.blackShade = hexColor(0x050505);              
         t.blackHighlight = hexColor(0xFFFFFF, 25);  t.blackRim = hexColor(0x000000);
         t.whiteFill = hexColor(0xF7F1E3);  t.whiteShade = hexColor(0xDCD2BC);           
@@ -46,8 +46,8 @@ themeManager::themeManager() {
         theme& t = themes_[2];
         t.id = themeID::dark;  t.name = "dark";  t.displayName = "Dark Mode";
         t.windowBg = hexColor(0x121215);  t.hudPanel = hexColor(0x1E1E24);  t.boardTint = hexColor(0x24242B);
-        t.grid = hexColor(0x4A4A58);  t.textPrimary = hexColor(0xF4F4F6);
-        t.accent = hexColor(0x38BDF8);  t.lastMove = hexColor(0x38BDF8);
+        t.grid = hexColor(0x001d2e);  t.textPrimary = hexColor(0xF4F4F6);
+        t.accent = hexColor(0x015382);  t.lastMove = hexColor(0x38BDF8);
         t.blackFill = hexColor(0x0A0A0C);  t.blackShade = hexColor(0x000000);              // black with a visible rim
         t.blackHighlight = hexColor(0xFFFFFF, 30);  t.blackRim = hexColor(0x5A5A68);
         t.whiteFill = hexColor(0xE4E4E7);  t.whiteShade = hexColor(0xB4B4BC);              // soft off-white
@@ -58,7 +58,7 @@ themeManager::themeManager() {
     for (theme& t : themes_) {                                   // asset paths follow one naming rule
         const std::string d = "assets/themes/" + t.name + "/";
         t.menuBg = d + "bg.jpg";  t.boardTex = d + "board.jpg";  t.bgm = d + "bgm.ogg";
-        t.sfxStone = d + "stone.wav"; t.sfxCapture = d + "capture.wav", t.sfxError = d + "error.wav";
+        t.sfxStone = d + "stone.wav"; t.sfxCapture = d + "capture.wav"; t.sfxError = d + "error.wav";
     }
 }
 
@@ -94,11 +94,24 @@ void themeManager::set(themeID id) {
 
 void themeManager::loadChoice(const std::string& path) {
     std::ifstream in(path);
-    std::string name;
-    if (!(in >> name)) return;
-    for (const theme& t : themes_) if (t.name == name) { set(t.id); return; }
+    std::string boardName, stoneName;
+    if (!(in >> boardName)) return;
+    if (!(in >> stoneName)) stoneName = boardName;
+
+    auto find = [&](const std::string& n, themeID& out) {
+        for (const theme& t : themes_)
+            if (t.name == n) {
+                out = t.id;
+                return true;
+            }
+        return false;
+    };
+    themeID id = id_;
+    if (find(boardName, id)) set(id);
+    id = id_;
+    if (find(stoneName, id)) stoneId_ = id;
 }
 void themeManager::saveChoice(const std::string& path) const {
     std::ofstream out(path);
-    out << current().name << "\n";
+    out << current().name << "\n" << stones().name << "\n";
 }

@@ -77,6 +77,7 @@ int main() {
 
     Audio audio;
     if (!audio.load()) std::cerr << "Some audio failed to load" << '\n';
+    
     auto stoneAt = [&](int x, int y) { return game.stoneAt(x, y); };
 
     button resumeBtn("Resume play", {975.f, 400.f}, {260.f, 46.f}, fonts.body);
@@ -88,21 +89,6 @@ int main() {
 
     themeManager& themes = themeManager::instance();
     themes.loadChoice();
-    
-    button themeBtn0("", {575.f, 330.f}, {420.f, 56.f}, fonts.body);
-    button themeBtn1("", {575.f, 400.f}, {420.f, 56.f}, fonts.body);
-    button themeBtn2("", {575.f, 470.f}, {420.f, 56.f}, fonts.body);
-    button settingsBackBtn("Back", {575.f, 580.f}, {240.f, 50.f}, fonts.body);
-    button* themeBtns[kThemeCount] = {&themeBtn0, &themeBtn1, &themeBtn2};
-
-    auto refreshThemeLabels = [&] {
-        for (int i = 0; i < kThemeCount; ++i) {
-            const theme& t = themes.get(static_cast<themeID>(i));
-            const bool on = (themes.currentId() == t.id);
-            themeBtns[i]->setLabel((on ? "> " : "") + t.displayName + (on ? " <" : ""));
-        }
-    };
-    refreshThemeLabels();
 
     sf::RectangleShape overlay({1150.f, 800.f});
     overlay.setFillColor(sf::Color(0, 0, 0, 170));
@@ -174,9 +160,20 @@ int main() {
     
     audio.load();
     themes.onChange([&](const theme& t) { 
-        audio.applyTheme(t); 
-        themes.saveChoice(); 
+        audio.applyTheme(t);  
     });
+
+    cfg.theme = static_cast<boardTheme>(static_cast<int>(themes.currentId()));
+    cfg.stones = static_cast<stoneStyle>(static_cast<int>(themes.stoneId()));
+
+    auto applySettings = [&] {
+        themes.set(static_cast<themeID>(static_cast<int>(cfg.theme)));
+        themes.setStoneStype(static_cast<themeID>(static_cast<int>(cfg.stones)));
+        audio.setMusicOn(cfg.bgmOn);
+        audio.setSfxVolume(cfg.sfxOn ? 70.f : 0.f);
+        themes.saveChoice();
+    };
+    applySettings();
 
     while (window.isOpen()) {
         sf::Event e;
@@ -253,18 +250,6 @@ int main() {
                 continue;
             }
 
-            if (screen == screen::Settings) {
-                if (e.type == sf::Event::MouseButtonPressed && e.mouseButton.button == sf::Mouse::Left) {
-                    for (int i = 0; i < kThemeCount; ++i)
-                        if (themeBtns[i]->contains(mouse)) { 
-                            themes.set(static_cast<themeID>(i)); 
-                            refreshThemeLabels();
-                        }
-                    if (settingsBackBtn.contains(mouse)) screen = screen::Menu;
-                }
-                if (e.type == sf::Event::KeyPressed && e.key.code == sf::Keyboard::Escape) screen = screen::Menu;
-                continue;
-            }
 
             if (e.type == sf::Event::MouseButtonPressed && e.mouseButton.button == sf::Mouse::Left) {
                 bool canUndo = (game.phase() == Phase::Playing);
@@ -423,11 +408,7 @@ int main() {
             goViewBtn.setHover(goViewBtn.contains(mouseNow));
             goMenuBtn.setHover(goMenuBtn.contains(mouseNow));
         }
-        if (screen == screen::Settings) { 
-            for (auto* b : themeBtns) b->setHover(b->contains(mouseNow)); 
-            settingsBackBtn.setHover(settingsBackBtn.contains(mouseNow)); 
-        }
-
+        
         bool marking = (ph == Phase::Marking);
         resumeBtn.setHover(marking && resumeBtn.contains(mouseNow));
         doneBtn.setHover(marking && doneBtn.contains(mouseNow));
@@ -436,8 +417,7 @@ int main() {
         bool canResume = (gameStarted && game.phase() != Phase::Finished || hasSaveFile);
         menu.update(mouseNow, canResume);
         if (menu.takeSettingsChanged()) {
-            audio.setMusicOn(cfg.bgmOn);
-            audio.setSfxVolume(cfg.sfxOn ? 70.f : 0.f);
+            applySettings();
         }
 
         float dt = clock.restart().asSeconds();
@@ -493,12 +473,7 @@ int main() {
                 }
                 break;
             }
-            case screen::Settings: {
-                textCentered(window, "Choose a theme", fonts.title_bold, 44, {575.f, 220.f}, th.textPrimary);
-                for (auto* b : themeBtns) b->draw(window);
-                settingsBackBtn.draw(window);
-                break;
-            }
+            
             case screen::GameOver: {
                 board.draw(window, stoneAt, game.currentPlayer(), std::nullopt, isDead);
                 window.draw(overlay);
@@ -525,9 +500,9 @@ int main() {
                         detail = "Score is even (0.0)";
                     }
                 }
-                textCentered(window, "GAME OVER", fonts.title_bold, 52, {575.f, 230.f}, sf::Color(255, 230, 150));
-                textCentered(window, result, fonts.title_bold, 36, {575.f, 305.f}, sf::Color::White);
-                textCentered(window, detail, fonts.body, 22, {575.f, 365.f}, sf::Color(220, 220, 220));
+                textCentered(window, "GAME OVER", fonts.title_bold, 52, {575.f, 230.f}, th.accent);
+                textCentered(window, result, fonts.title_bold, 36, {575.f, 305.f}, th.textPrimary);
+                textCentered(window, detail, fonts.body, 22, {575.f, 365.f}, mixColor(th.hudPanel, th.textPrimary, 0.8f));
                 window.draw(divider);
                 goNewBtn.draw(window);
                 goViewBtn.draw(window);

@@ -129,6 +129,7 @@ void menuView::onSettingsClick(int i) {
             break;
         case 2: // Cycle Board Theme
             cfg.theme = static_cast<boardTheme>((static_cast<int>(cfg.theme) + 1) % 3);
+            cfg.stones = static_cast<stoneStyle>(static_cast<int>(cfg.theme));
             settingsChanged = true;
             break;
         case 3: // Cycle Stone Style

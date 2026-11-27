@@ -64,7 +64,12 @@ class themeManager {
 
         void loadChoice(const std::string& path = "theme.cfg");
         void saveChoice(const std::string& path = "theme.cfg") const;
-    
+        
+        const theme& stones() const {
+            return themes_[static_cast<int>(stoneId_)]; }
+            themeID stoneId() const { return stoneId_; }
+            void setStoneStype(themeID id) { stoneId_ = id; }
+        
     private:
         themeManager();
         struct Resources {
@@ -77,4 +82,5 @@ class themeManager {
         std::vector<std::function<void(const theme&)>> listeners_;
         themeID id_ = themeID::zen;
         unsigned version_ = 1;
+        themeID stoneId_ = themeID::zen;
 };

@@ -119,7 +119,7 @@ void BoardView::rebuildStatic() const {
 }
 
 void BoardView::drawStone(sf::RenderTarget& t, sf::Vector2f p, int who, float a01, float scale) const {
-    const theme& th = themeManager::instance().current();
+    const theme& th = themeManager::instance().stones();
     const bool black = (who == 1);
     const float r  = cell_ * 0.46f * scale;
     const float rw = std::min(th.rimWidth, r * 0.3f);
