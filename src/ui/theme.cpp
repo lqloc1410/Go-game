@@ -21,11 +21,11 @@ themeManager::themeManager() {
         t.id = themeID::zen;  t.name = "zen";  t.displayName = "Traditional Zen";
         t.windowBg = hexColor(0x2B2118);  t.hudPanel = hexColor(0x3B2E22);  t.boardTint = hexColor(0xD8A25E);
         t.grid = hexColor(0x231709);  t.textPrimary = hexColor(0xF7EFE5);
-        t.accent = hexColor(0xC85A32);  t.lastMove = hexColor(0xE04F33);
+        t.accent = hexColor(0xffe696);  t.lastMove = hexColor(0xE04F33);
         t.blackFill = hexColor(0x2A2724);  t.blackShade = hexColor(0x100E0C);              
         t.blackHighlight = hexColor(0xFFF2DC, 45);  t.blackRim = hexColor(0x0F0D0B);
         t.whiteFill = hexColor(0xF3EBDC);  t.whiteShade = hexColor(0xCFC3AA);             
-        t.whiteHighlight = hexColor(0xFFFFFF, 170);  t.whiteRim = hexColor(0xB5A88F);
+        t.whiteHighlight = hexColor(0xFFFFFF, 220);  t.whiteRim = hexColor(0xB5A88F);
         t.rimWidth = 1.f;  t.shadowAlpha = 75.f;
         t.gridThickness = 0.045f;  t.inkLines = false;  t.boardTexAlpha = 200;  t.menuDimAlpha = 75;
     }

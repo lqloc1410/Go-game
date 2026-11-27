@@ -6,6 +6,26 @@ static sf::String u8(const std::string& s) {
     return sf::String::fromUtf8(s.begin(), s.end());
 }
 
+hudView::hudView(const Fonts& fonts) : fonts_(fonts), btns_ {
+    button("Undo",  {0.f, 0.f}, {66.f, 36.f}, fonts.body),
+    button("Redo",  {0.f, 0.f}, {66.f, 36.f}, fonts.body),
+    button("Save",  {0.f, 0.f}, {66.f, 36.f}, fonts.body),
+    button("Reset", {0.f, 0.f}, {66.f, 36.f}, fonts.body)
+    } {}
+
+void hudView::ensureButtons(float panelX) {
+    if (builtPanelX == panelX) return;
+    builtPanelX = panelX;
+
+    float colX = panelX + 250.f;
+    sf::Vector2f sz{150.f, 36.f};
+
+    btns_[0] = button("Undo", {colX,  600.f}, sz, fonts_.body);
+    btns_[1] = button("Redo", {colX, 650.f}, sz, fonts_.body);
+    btns_[2] = button("Save", {colX,  700.f}, sz, fonts_.body);
+    btns_[3] = button("Reset", {colX, 750.f}, sz, fonts_.body);
+}
+
 void hudView::push(const std::string& t, float sec) {
     for (auto& old : toasts_)
         if (old.text == t) { old.left = sec; return; }
@@ -17,10 +37,30 @@ void hudView::update(float dt) {
     for (auto& t : toasts_) t.left -= dt;
     while (!toasts_.empty() && toasts_.front().left <= 0.f) toasts_.pop_front();
 }
+
+void hudView::updateButtons(sf::Vector2f mouse, float panelX, bool canUndo, bool canRedo, bool canReset) {
+    ensureButtons(panelX);
+    bool states[4] = { canUndo, canRedo, canReset, canReset };
+    for (int i = 0; i < 4; i++) {
+        btns_[i].setEnabled(states[i]);
+        btns_[i].setHover(btns_[i].contains(mouse));
+    }
+}
+hudAction hudView::handleClick(sf::Vector2f mouse, float panelX, bool canUndo, bool canRedo, bool canReset) {
+    updateButtons(mouse, panelX, canUndo, canRedo, canReset);
+    if (btns_[0].contains(mouse)) return hudAction::Undo;
+    if (btns_[1].contains(mouse)) return hudAction::Redo;
+    if (btns_[2].contains(mouse)) return hudAction::Save;
+    if (btns_[3].contains(mouse)) return hudAction::Reset;
+    return hudAction::None;
+}
+
 // AI-assisted: see AI20. AI35
 void hudView::draw(sf::RenderWindow& w, float panelX, int currentPlayer,
                    bool gameOver, int blackStones, int whiteStones, 
-                   const std::string& headline, const std::string& subline) const {
+                   const std::string& headline, const std::string& subline) {
+    ensureButtons(panelX);
+
     const theme& th = themeManager::instance().current();
     const sf::Color muted  = mixColor(th.hudPanel, th.textPrimary, 0.55f);
     
@@ -47,7 +87,7 @@ void hudView::draw(sf::RenderWindow& w, float panelX, int currentPlayer,
     } else {
         sf::CircleShape s(18.f);
         s.setPosition(x, 30.f);
-        s.setFillColor(currentPlayer == 1 ? th.blackFill : th.whiteFill);
+        s.setFillColor(currentPlayer == 1 ? th.blackShade : th.whiteHighlight);
         s.setOutlineThickness(2.f);
         s.setOutlineColor(currentPlayer == 1 ? th.blackRim : th.whiteRim);
         w.draw(s);
@@ -67,4 +107,6 @@ void hudView::draw(sf::RenderWindow& w, float panelX, int currentPlayer,
     text(fonts_.body, "N = Reset board", x, 675.f, 15, th.textPrimary);
     text(fonts_.body, "R = Resign", x,700.f, 15, th.textPrimary);
     text(fonts_.body, "S = Save Game", x, 725.f, 15, th.textPrimary);
+
+    for (auto& b : btns_) b.draw(w);
 }

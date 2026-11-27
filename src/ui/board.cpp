@@ -241,7 +241,7 @@ void BoardView::draw(sf::RenderWindow& w, const std::function<int(int, int)>& st
     if (lastMove && stoneAt(lastMove->x, lastMove->y) != 0) {
         int who = stoneAt(lastMove -> x, lastMove -> y);
         if (who != 0) {
-            sf::Color ring = (who == 1) ? th.whiteFill : th.blackFill;
+            sf::Color ring = (who == 1) ? th.whiteHighlight : th.blackShade;
             ring.a = 255;
             float mr = r * 0.6f;
             sf::CircleShape mark(mr);

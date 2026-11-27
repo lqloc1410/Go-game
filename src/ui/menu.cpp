@@ -288,7 +288,7 @@ void menuView::draw(sf::RenderWindow& w) {
     else if (page == page::Difficulty) header = "Select difficulty";
     else if (page == page::boardSize) header = "Select board size";
     
-    if (header) textCentered(w, header, fonts.body, 26, {575.f, 320.f}, mixColor(th.windowBg, th.textPrimary, 0.65f));
+    if (header) textCentered(w, header, fonts.body, 26, {575.f, 320.f}, mixColor(th.windowBg, th.textPrimary, 0.85f));
     
     for (auto& b : active()) b.draw(w);
 

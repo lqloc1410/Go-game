@@ -267,61 +267,100 @@ int main() {
             }
 
             if (e.type == sf::Event::MouseButtonPressed && e.mouseButton.button == sf::Mouse::Left) {
+                bool canUndo = (game.phase() == Phase::Playing);
+                bool canRedo = (game.phase() == Phase::Playing);
+                bool canReset = gameStarted;
+
+                bool clickedBoardOrMarking = false;
                 switch (game.phase()) {
                     case Phase::Marking:
-                        if (doneBtn.contains(mouse)) game.confirmScore();
+                        if (doneBtn.contains(mouse)) {
+                            game.confirmScore();
+                            clickedBoardOrMarking = true;
+                        }
                         else if (resumeBtn.contains(mouse)) {
                             game.resumePlay();
                             hud.push("Back to play");
+                            clickedBoardOrMarking = true;
                         }
-                        else if (auto p = board.pixelToGrid(mouse)) game.toggleDeadGroup(p -> x, p -> y);
+                        else if (auto p = board.pixelToGrid(mouse)) {
+                            game.toggleDeadGroup(p -> x, p -> y);
+                            clickedBoardOrMarking = true;
+                        }
                         break;
                     case Phase::Playing:
                         if (auto p = board.pixelToGrid(mouse)) {
-                        MoveInfo m = game.play(p->x, p->y);
-                        switch (m.result) {
-                            case MoveStatus::Success:
-                                if (m.captured > 0) {
-                                    hud.push("Captured " + std::to_string(m.captured) + " stones!");
-                                    audio.playCapture();
+                            clickedBoardOrMarking = true;
+                            MoveInfo m = game.play(p->x, p->y);
+                            switch (m.result) {
+                                case MoveStatus::Success:
+                                    if (m.captured > 0) {
+                                        hud.push("Captured " + std::to_string(m.captured) + " stones!");
+                                        audio.playCapture();
+                                    }
+                                    else audio.playStone();                            
+                                    break;
+                                case MoveStatus::Occupied: 
+                                    hud.push("That point is already occupied!");
+                                    audio.playError(); 
+                                    break;
+                                case MoveStatus::Ko:  
+                                    hud.push("Ko/Superko violation!");
+                                    audio.playError(); 
+                                    break;
+                                case MoveStatus::Suicide:  
+                                    hud.push("Suicide is not allowed!");
+                                    audio.playError(); 
+                                    break;
+                                case MoveStatus::GameEnded: 
+                                    hud.push("The game is over!"); 
+                                    audio.playError();
+                                    break;
+                                case MoveStatus::OutOfBounds:  
+                                    hud.push("Out of bounds!");
+                                    audio.playError(); 
+                                    break;
+                                case MoveStatus::InvalidCommand:  
+                                    hud.push("Unknown command. Try again!");
+                                    audio.playError(); 
+                                    break;
+                                default: break;
                                 }
-                                else audio.playStone();                            
-                                break;
-                            case MoveStatus::Occupied: 
-                                hud.push("That point is already occupied!");
-                                audio.playError(); 
-                                break;
-                            case MoveStatus::Ko:  
-                                hud.push("Ko/Superko violation!");
-                                audio.playError(); 
-                                break;
-                            case MoveStatus::Suicide:  
-                                hud.push("Suicide is not allowed!");
-                                audio.playError(); 
-                                break;
-                            case MoveStatus::GameEnded: 
-                                hud.push("The game is over!"); 
-                                audio.playError();
-                                break;
-                            case MoveStatus::OutOfBounds:  
-                                hud.push("Out of bounds!");
-                                audio.playError(); 
-                                break;
-                            case MoveStatus::InvalidCommand:  
-                                hud.push("Unknown command. Try again!");
-                                audio.playError(); 
-                                break;
-                            default: break;
                             }
-                        }
-                        break;
-                    case Phase::Finished: 
-                        break;
+                            break;
+                        case Phase::Finished: 
+                            break;
+                }
+                if (!clickedBoardOrMarking) {
+                    hudAction act = hud.handleClick(mouse, 800.f, canUndo, canRedo, canReset);
+                    switch (act) {
+                        case hudAction::Undo:
+                            if (!game.undo()) hud.push("Nothing to undo!");
+                            break;
+                        case hudAction::Redo:
+                            if (!game.redo()) hud.push("Nothing to redo!");
+                            break;
+                        case hudAction::Save:
+                            if (game.save()) {
+                                hud.push("Game saved!");
+                                hasSaveFile = true;
+                            } 
+                            else {
+                                hud.push("Save failed! Try again.");
+                            }
+                            break;
+                        case hudAction::Reset:
+                            game.newGame();
+                            viewingFinalBoard = false;
+                            over = false;
+                            prevPhase = game.phase();
+                            hud.push("Board reset!");
+                            break;
+                        case hudAction::None:
+                            break;
+                    }
                 }
             }
-              
-        
-
             if (e.type == sf::Event::KeyPressed) {
                 switch (e.key.code) {
                     case sf::Keyboard::Escape: 
@@ -392,6 +431,7 @@ int main() {
         bool marking = (ph == Phase::Marking);
         resumeBtn.setHover(marking && resumeBtn.contains(mouseNow));
         doneBtn.setHover(marking && doneBtn.contains(mouseNow));
+        hud.updateButtons(mouseNow, 800.f, ph == Phase::Playing, ph == Phase::Playing, gameStarted);
         
         bool canResume = (gameStarted && game.phase() != Phase::Finished || hasSaveFile);
         menu.update(mouseNow, canResume);
@@ -400,8 +440,9 @@ int main() {
             audio.setSfxVolume(cfg.sfxOn ? 70.f : 0.f);
         }
 
-        hud.update(clock.restart().asSeconds());
-        audio.update(clock.restart().asSeconds());
+        float dt = clock.restart().asSeconds();
+        hud.update(dt);
+        audio.update(dt);
 
         const theme& th = themes.current();
         window.clear(th.windowBg);

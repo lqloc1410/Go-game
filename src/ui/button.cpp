@@ -28,7 +28,7 @@ void button::draw(sf::RenderWindow& w) {
         text.setFillColor(mixColor(th.hudPanel, th.textPrimary, 0.35f));
     } 
     else if (hover) {
-        box.setFillColor(mixColor(th.hudPanel, th.accent, 0.45f));
+        box.setFillColor(mixColor(th.hudPanel, th.accent, 0.25f));
         box.setOutlineColor(th.accent);
         text.setFillColor(th.textPrimary);
     } 
